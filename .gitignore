@@ -60,3 +60,11 @@ electron/release/
 # Test artifacts
 .test-results.json
 .test-data/
+
+# Code signing certificates and keys - never commit these
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.pem
+*.keystore
