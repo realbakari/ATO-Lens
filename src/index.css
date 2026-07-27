@@ -1,0 +1,299 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* Pure white - visitors.now style */
+    --color-bg: #ffffff;
+    --color-bg-subtle: #fafafa;
+    --color-bg-muted: rgba(0, 0, 0, 0.04);
+    --color-bg-muted-hover: rgba(0, 0, 0, 0.08);
+    --color-bg-elevated: #ffffff;
+    --color-ring-elevated: rgba(0, 0, 0, 0.05);
+
+    --color-text: #000000;
+    --color-text-secondary: #666666;
+    --color-text-muted: #999999;
+    --color-text-tertiary: #cccccc;
+
+    /* Hairline borders */
+    --color-border: rgba(0, 0, 0, 0.08);
+    --color-border-subtle: rgba(0, 0, 0, 0.04);
+    --color-border-opaque: #eee;
+
+    /* Colors matching visitors.now */
+    --color-negative: #e85d5d;
+    --color-positive: #22c55e;
+    --color-chart: #4a90d9;
+    --color-score: #22c55e;
+
+    /* Row hover */
+    --color-row-hover: #fafafa;
+
+    /* Dialog overlay */
+    --color-overlay: rgba(255, 255, 255, 0.7);
+
+    /* Brand */
+    --color-brand: #007ae7;
+
+    --electron-traffic-left: 0px;
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    --color-bg: #0a0a0a;
+    --color-bg-subtle: #111111;
+    --color-bg-muted: rgba(255, 255, 255, 0.05);
+    --color-bg-muted-hover: rgba(255, 255, 255, 0.1);
+    --color-bg-elevated: #151515;
+    --color-ring-elevated: rgba(255, 255, 255, 0.15);
+
+    --color-text: #ffffff;
+    --color-text-secondary: #999999;
+    --color-text-muted: #666666;
+    --color-text-tertiary: #333333;
+
+    --color-border: rgba(255, 255, 255, 0.1);
+    --color-border-subtle: rgba(255, 255, 255, 0.05);
+    --color-border-opaque: #212121;
+
+    --color-negative: #f87171;
+    --color-positive: #4ade80;
+    --color-chart: #007ae7;
+    --color-score: #4ade80;
+
+    --color-row-hover: #151515;
+
+    /* Dialog overlay */
+    --color-overlay: rgba(0, 0, 0, 0.6);
+
+    /* Brand */
+    --color-brand: #007ae7;
+  }
+
+  [data-electron="true"][data-platform="darwin"],
+  html[data-electron="true"][data-platform="darwin"],
+  body[data-electron="true"][data-platform="darwin"] {
+    --electron-traffic-left: 84px;
+  }
+
+  html {
+    font-feature-settings: "cv03", "cv04", "cv11";
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-text-tertiary) transparent;
+  }
+
+  /* macOS-style scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-text-tertiary);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-[var(--color-bg)] p-0 text-[var(--color-text)];
+  }
+
+  .app-window-drag {
+    -webkit-app-region: drag;
+  }
+
+  .app-window-no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  .app-window-drag button,
+  .app-window-drag a,
+  .app-window-drag input,
+  .app-window-drag textarea,
+  .app-window-drag select,
+  .app-window-drag [role="button"],
+  .app-window-drag [role="tab"],
+  .app-window-drag [data-no-drag="true"] {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Text selection colors */
+  ::selection {
+    background-color: rgba(0, 154, 250, 0.1);
+    color: #0066db;
+  }
+
+  .dark ::selection {
+    background-color: rgba(240, 104, 0, 0.1);
+    color: #ff6b01;
+  }
+
+  /* Table resizer */
+  .resizer {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    width: 4px;
+    cursor: col-resize;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .resizer:hover,
+  .resizer.isResizing {
+    background: var(--color-border);
+  }
+
+  /* Minimal focus */
+  *:focus-visible {
+    outline: 1px solid var(--color-text-muted);
+    outline-offset: 1px;
+  }
+
+  /* Sticky cells need a background to cover content when scrolling */
+  td.sticky-cell {
+    background-color: var(--color-bg);
+  }
+
+  /* Zebra striping - visible only when not hovering table */
+  tbody:not(:hover):not(.no-zebra) tr:nth-child(odd):not(.no-zebra) td {
+    background-color: var(--color-bg-subtle);
+  }
+
+  /* Sticky cells need explicit zebra background too (higher specificity) */
+  tbody:not(:hover):not(.no-zebra) tr:nth-child(odd):not(.no-zebra) td.sticky-cell {
+    background-color: var(--color-bg-subtle);
+  }
+}
+
+/* Card surface used by every panel in the workspace. */
+.glass-panel {
+  background-color: rgba(9, 9, 11, 0.72);
+  border: 1px solid #27272a;
+  border-radius: 0.75rem;
+  backdrop-filter: blur(12px);
+  box-shadow:
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.04),
+    0 1px 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* Inner card, one step lighter than the panel it sits in. */
+.glass-card {
+  background-color: rgba(24, 24, 27, 0.6);
+  border: 1px solid #27272a;
+  border-radius: 0.625rem;
+  transition: border-color 0.15s ease;
+}
+
+/* Scrollable strips (financial year tabs) that shouldn't show a scrollbar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@utility shadow-contrast {
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04),
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.04),
+    0 1px 3px 0px rgba(0, 0, 0, 0.4);
+}
+
+/* Entrance animations for dialogs, menus, and drawers. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes dialogBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialogPopupIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dialog-backdrop {
+  animation: dialogBackdropIn 0.15s ease-out forwards;
+}
+
+.dialog-popup {
+  animation: dialogPopupIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.menu-popup {
+  transform-origin: top left;
+  animation: menuIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes drawerSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.drawer-slide-in {
+  animation: drawerSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

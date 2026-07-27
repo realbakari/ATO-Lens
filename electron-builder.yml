@@ -1,0 +1,54 @@
+appId: com.atolens.app
+productName: ATO Lens
+directories:
+  output: release
+
+# Where electron-updater looks for new versions. Declaring it also makes
+# electron-builder emit the latest*.yml metadata each release needs.
+# Note: draft releases are invisible to the update feed - a release only
+# reaches users once it is published.
+publish:
+  provider: github
+  owner: realbakari
+  repo: ATO-Lens
+files:
+  - dist/**/*
+  - electron/**/*
+  - '!electron/entitlements.*.plist'
+
+# Avoids the space in "ATO Lens" ending up percent-encoded in download URLs.
+artifactName: ATO-Lens-${version}-${arch}.${ext}
+
+mac:
+  category: public.app-category.finance
+  # Icon is drawn on the Apple grid (824pt shape inset in a 1024pt canvas).
+  icon: electron/assets/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: electron/entitlements.mac.plist
+  entitlementsInherit: electron/entitlements.mac.plist
+  # Notarization is switched on by CI (-c.mac.notarize=true) only when the
+  # signing secrets are present, so local and fork builds still succeed.
+  notarize: false
+  # Architecture comes from the CLI (--arm64 --x64), built in a single pass so
+  # one latest-mac.yml covers both. Listing arches here would override the flag.
+  # The zip is what electron-updater installs from; the DMG is for humans.
+  target:
+    - dmg
+    - zip
+
+win:
+  # Windows and Linux expect a full-bleed tile rather than the inset Apple grid.
+  icon: electron/assets/app-icon.png
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  icon: electron/assets/app-icon.png
+  category: Finance
+  target:
+    - AppImage

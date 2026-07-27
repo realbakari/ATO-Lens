@@ -1,0 +1,191 @@
+name: Electron Desktop Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (without v prefix)'
+        required: false
+
+jobs:
+  build-mac:
+    # Both architectures build in one job on purpose: electron-builder writes a
+    # single latest-mac.yml per invocation, so splitting them across jobs would
+    # produce two manifests that overwrite each other in the release.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web application
+        run: npm run build
+
+      # Secrets are unavailable to forks and may not be configured yet, so the
+      # build has to pick a path rather than fail on a missing certificate.
+      - name: Check for signing credentials
+        id: creds
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            echo 'signed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'signed=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::MAC_CSC_LINK is not set - producing an UNSIGNED macOS build that Gatekeeper will block.'
+          fi
+
+      - name: Package macOS app (signed and notarized)
+        if: steps.creds.outputs.signed == 'true'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --arm64 --x64 --config electron-builder.yml -c.mac.notarize=true --publish never
+
+      - name: Package macOS app (unsigned fallback)
+        if: steps.creds.outputs.signed != 'true'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac --arm64 --x64 --config electron-builder.yml --publish never
+
+      - name: Verify signature and notarization
+        if: steps.creds.outputs.signed == 'true'
+        run: |
+          for APP in release/mac*/*.app; do
+            echo "Verifying $APP"
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            # Confirms the notarization ticket is stapled - without this the app
+            # still fails to open on a machine that has never seen it before.
+            spctl --assess --type execute --verbose=4 "$APP"
+          done
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/latest-mac.yml
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web application
+        run: npm run build
+
+      # No Windows code signing certificate yet, so this installer is unsigned
+      # and SmartScreen will warn on first run. See README "Installing".
+      - name: Package Windows installer (unsigned)
+        run: npx electron-builder --win --config electron-builder.yml --publish never
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web application
+        run: npm run build
+
+      - name: Package Linux AppImage
+        run: npx electron-builder --linux --config electron-builder.yml --publish never
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: |
+            release/*.AppImage
+            release/latest-linux.yml
+          if-no-files-found: error
+
+  publish:
+    needs: [build-mac, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get release version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The Windows installer is unsigned, so publishing checksums is the only
+      # way for someone to confirm the file they downloaded is the file built here.
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' \) -exec sha256sum {} + \
+            | sed 's#\./[^/]*/##' > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish GitHub desktop release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ATO Lens v${{ steps.version.outputs.version }}
+          draft: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.exe
+            artifacts/**/*.AppImage
+            artifacts/**/*.blockmap
+            artifacts/**/latest*.yml
+            artifacts/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
