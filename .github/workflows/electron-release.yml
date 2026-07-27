@@ -45,6 +45,28 @@ jobs:
             echo '::warning::MAC_CSC_LINK is not set - producing an UNSIGNED macOS build that Gatekeeper will block.'
           fi
 
+      # Notarization runs at the very end of packaging, so bad credentials
+      # otherwise surface several minutes in. This checks them in seconds.
+      - name: Validate notarization credentials
+        if: steps.creds.outputs.signed == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "$APPLE_APP_SPECIFIC_PASSWORD" != "$(printf '%s' "$APPLE_APP_SPECIFIC_PASSWORD" | tr -d '[:space:]')" ]; then
+            echo '::error::APPLE_APP_SPECIFIC_PASSWORD contains whitespace - it was probably pasted with a trailing newline. Re-add it with: gh secret set APPLE_APP_SPECIFIC_PASSWORD'
+            exit 1
+          fi
+          if ! xcrun notarytool history \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" > /dev/null; then
+            echo '::error::Apple rejected the notarization credentials. Verify locally with: xcrun notarytool store-credentials'
+            exit 1
+          fi
+          echo 'Notarization credentials accepted by Apple.'
+
       - name: Package macOS app (signed and notarized)
         if: steps.creds.outputs.signed == 'true'
         env:
