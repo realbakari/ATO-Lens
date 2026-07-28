@@ -1,4 +1,5 @@
 import type { DocumentType } from '../types/tax';
+import type { ExtractProgress } from './pdfExtract';
 
 export interface ParsedField<T> {
   value: T;
@@ -21,6 +22,8 @@ export interface DocumentParserProvider {
   parseDocument(
     fileBuffer: ArrayBuffer,
     fileName: string,
-    documentType?: DocumentType
+    documentType?: DocumentType,
+    /** Reports reading/recognition progress; OCR of a scan takes seconds. */
+    onProgress?: ExtractProgress
   ): Promise<ParsedDocumentResult>;
 }

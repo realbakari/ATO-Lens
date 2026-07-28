@@ -48,22 +48,26 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ stage: string; percent?: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const needsApiKey = isMissingApiKey(selectedProvider);
 
   const runUpload = async (file: File | { name: string; buffer: ArrayBuffer }) => {
     setErrorMessage(null);
+    setProgress(null);
     setIsProcessing(true);
     try {
       const fileName = file.name;
       const buffer = file instanceof File ? await file.arrayBuffer() : file.buffer;
       const parser = getDocumentParser(selectedProvider);
-      const result = await parser.parseDocument(buffer, fileName, docType);
+      const result = await parser.parseDocument(buffer, fileName, docType, (stage, percent) =>
+        setProgress({ stage, percent })
+      );
 
       if (Object.keys(result.extractedFields).length === 0) {
         setErrorMessage(
-          'No tax figures could be read from this file, so nothing was added. Check the document type above, or use an AI parser for scanned PDFs.'
+          'No tax figures could be read from this file, so nothing was added. Check the document type selected above, or try an AI adapter if the scan is unusually faint.'
         );
         return;
       }
@@ -75,6 +79,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       setErrorMessage('Could not parse this document. The offline parser may handle it - try switching adapters.');
     } finally {
       setIsProcessing(false);
+      setProgress(null);
     }
   };
 
@@ -214,14 +219,25 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           {isProcessing ? (
             <div className="space-y-2.5">
               <BrailleSpinner className="block h-7 text-center font-mono text-2xl leading-none text-emerald-400" />
-              <p className="font-mono text-xs font-medium text-emerald-400">Reading tax fields…</p>
+              <p className="font-mono text-xs font-medium text-emerald-400">
+                {progress?.stage ?? 'Reading tax fields'}…
+              </p>
+              {progress?.percent !== undefined && (
+                <div className="mx-auto h-1 w-40 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full bg-emerald-500 transition-[width] duration-200"
+                    style={{ width: `${Math.min(100, Math.round(progress.percent))}%` }}
+                  />
+                </div>
+              )}
+              <p className="text-[11px] text-zinc-500">Runs on this machine</p>
             </div>
           ) : (
             <div className="space-y-2">
               <FileText className="mx-auto h-7 w-7 text-zinc-600" />
               <p className="text-xs font-medium text-zinc-200">Drop a file here, or click to browse</p>
               <p className="text-[11px] text-zinc-500">
-                The offline parser reads text-based files; scanned PDFs need an AI adapter.
+                Text PDFs are read directly; scans go through on-device text recognition.
               </p>
             </div>
           )}

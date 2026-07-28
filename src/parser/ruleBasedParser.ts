@@ -1,6 +1,7 @@
 import type { DocumentParserProvider, ParsedDocumentResult, ParsedField } from './providerAdapter';
 import type { DocumentType } from '../types/tax';
 import { redactSensitiveData, logNetworkActivity } from '../storage/privacyLog';
+import { extractDocumentText, type ExtractProgress, type PdfExtraction } from './pdfExtract';
 
 export class LocalRuleBasedParser implements DocumentParserProvider {
   providerId = 'rule_based' as const;
@@ -9,17 +10,21 @@ export class LocalRuleBasedParser implements DocumentParserProvider {
   async parseDocument(
     fileBuffer: ArrayBuffer,
     fileName: string,
-    documentType?: DocumentType
+    documentType?: DocumentType,
+    onProgress?: ExtractProgress
   ): Promise<ParsedDocumentResult> {
     // Log local offline request to Privacy Network Activity Monitor
     logNetworkActivity('Local Client Machine (Offline)', `Parsed ${fileName} locally`, 'offline_local', fileBuffer.byteLength);
 
-    const decoder = new TextDecoder('utf-8');
+    // Reads the PDF's text layer, or falls back to on-device OCR for scans.
+    // Both run locally - no part of the document leaves the machine here.
     let rawText = '';
+    let extraction: PdfExtraction | null = null;
     try {
-      rawText = decoder.decode(fileBuffer);
-    } catch {
-      rawText = '';
+      extraction = await extractDocumentText(fileBuffer, onProgress);
+      rawText = extraction.text;
+    } catch (err) {
+      console.error('[ATO Lens] Could not read document text:', err);
     }
 
     // Figures are read from the original text: redaction blanks digit runs, so
@@ -31,15 +36,44 @@ export class LocalRuleBasedParser implements DocumentParserProvider {
     const detectedType = documentType || this.detectDocumentType(fileName, text);
     const extractedFields: Record<string, ParsedField<any>> = {};
 
-    const fyMatch = text.match(/20(2[0-9])[–\-/](2[0-9])/);
-    const financialYear = fyMatch ? `20${fyMatch[1]}–${fyMatch[2]}` : currentFinancialYearLabel();
+    const financialYear = detectFinancialYear(text);
 
     if (detectedType === 'notice_of_assessment') {
-      this.put(extractedFields, 'taxableIncome', text, /Taxable income\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i);
-      this.put(extractedFields, 'taxWithheldCredit', text, /(?:PAYG )?[Tt]ax withheld\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/);
-      this.put(extractedFields, 'medicareLevy', text, /Medicare levy\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i);
-      this.put(extractedFields, 'helpRepayment', text, /HELP (?:compulsory )?repayment\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i);
-      this.put(extractedFields, 'assessmentResult', text, /(?:Refund|Credit|Outcome)\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i);
+      // Wording taken from real notices: "Your taxable income is $58,542",
+      // "PAYG withholding (eg tax deducted by your employer or bank)".
+      this.put(extractedFields, 'taxableIncome', text, [
+        /(?:your )?taxable income\s*(?:is)?\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i
+      ]);
+      this.put(extractedFields, 'taxWithheldCredit', text, [
+        /PAYG withholding[^\d\n]*([\d,]+(?:\.\d{2})?)/i,
+        /(?:PAYG )?tax withheld\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i
+      ]);
+      this.put(extractedFields, 'medicareLevy', text, [
+        /Medicare levy(?! surcharge)[^\d\n]*([\d,]+(?:\.\d{2})?)/i
+      ]);
+      this.put(extractedFields, 'helpRepayment', text, [
+        /(?:HELP|HECS)[^\n]*?repayment[^\d\n]*([\d,]+(?:\.\d{2})?)/i
+      ]);
+      this.put(extractedFields, 'lowIncomeOffset', text, [
+        /Low income (?:tax )?offset[^\d\n]*([\d,]+(?:\.\d{2})?)/i
+      ]);
+
+      // The outcome carries CR (refunded to you) or DR (payable). Without the
+      // suffix a bill and a refund are the same number.
+      const outcome = text.match(
+        /(?:Outcome|Result) of this notice\s*:?\s*\$?([\d,]+(?:\.\d{2})?)\s*(CR|DR)?/i
+      );
+      if (outcome?.[1]) {
+        const amount = parseFloat(outcome[1].replace(/,/g, ''));
+        if (!isNaN(amount)) {
+          extractedFields['assessmentResult'] = {
+            value: /dr/i.test(outcome[2] || '') ? -amount : amount,
+            confidence: 0.94,
+            sourceText: outcome[0].trim(),
+            sourcePage: 1
+          };
+        }
+      }
     } else if (detectedType === 'payslip') {
       const employer = text.match(/Employer\s*:?\s*([^\n\r]+)/i);
       if (employer?.[1]) {
@@ -63,9 +97,18 @@ export class LocalRuleBasedParser implements DocumentParserProvider {
     }
 
     const confidences = Object.values(extractedFields).map((f) => f.confidence);
-    const confidenceAverage = confidences.length
+    let confidenceAverage = confidences.length
       ? confidences.reduce((sum, c) => sum + c, 0) / confidences.length
       : 0;
+
+    // A figure recognised from a scan is only as trustworthy as the recognition
+    // that produced it, so the page confidence caps the field confidence.
+    if (extraction?.source === 'ocr' && extraction.ocrConfidence !== undefined) {
+      confidenceAverage *= extraction.ocrConfidence;
+      for (const field of Object.values(extractedFields)) {
+        field.confidence *= extraction.ocrConfidence;
+      }
+    }
 
     return {
       documentType: detectedType,
@@ -105,14 +148,35 @@ export class LocalRuleBasedParser implements DocumentParserProvider {
     fields: Record<string, ParsedField<any>>,
     key: string,
     text: string,
-    regex: RegExp
+    patterns: RegExp | RegExp[]
   ): void {
-    const match = text.match(regex);
-    if (!match?.[1]) return;
-    const value = parseFloat(match[1].replace(/,/g, ''));
-    if (isNaN(value)) return;
-    fields[key] = { value, confidence: 0.94, sourceText: match[0].trim(), sourcePage: 1 };
+    for (const regex of Array.isArray(patterns) ? patterns : [patterns]) {
+      const match = text.match(regex);
+      if (!match?.[1]) continue;
+      const value = parseFloat(match[1].replace(/,/g, ''));
+      if (isNaN(value)) continue;
+      fields[key] = { value, confidence: 0.94, sourceText: match[0].trim(), sourcePage: 1 };
+      return;
+    }
   }
+}
+
+/**
+ * Works out which financial year a document covers. Notices of assessment state
+ * "year ended 30 June 2016" rather than a 2015-16 style label, and filing an old
+ * notice under the current year would silently corrupt the workspace.
+ */
+function detectFinancialYear(text: string): string {
+  const yearEnded = text.match(/(?:year|period) end(?:ed|ing)\s+30 June\s+(20\d{2})/i);
+  if (yearEnded) {
+    const endYear = Number(yearEnded[1]);
+    return `${endYear - 1}–${String(endYear).slice(-2)}`;
+  }
+
+  const labelled = text.match(/(20\d{2})\s*[–\-/]\s*(\d{2})\b/);
+  if (labelled) return `${labelled[1]}–${labelled[2]}`;
+
+  return currentFinancialYearLabel();
 }
 
 /** Label of the Australian financial year (1 July - 30 June) that "today" falls in. */
