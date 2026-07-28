@@ -7,9 +7,11 @@ vi.mock('./pdfExtract', () => ({
   extractDocumentText: vi.fn(async (buffer: ArrayBuffer) => ({
     text: new TextDecoder().decode(buffer),
     source: 'plain_text',
-    pageCount: 1
+    pageCount: 1,
+    pages: [{ pageNumber: 1, text: new TextDecoder().decode(buffer), source: 'plain_text' }]
   })),
   confidenceForSnippet: vi.fn(),
+  pageForSnippet: vi.fn(() => 1),
   type: {}
 }));
 
@@ -60,5 +62,28 @@ ${outcome}`;
     expect(result.extractedFields.assessmentResult.value).toBe(1284);
     expect(result.extractedFields.taxableIncome.value).toBe(89670);
     expect(result.rawText).not.toContain('123 456 789');
+  });
+
+  it.each([
+    ['notice_of_assessment', 'assessmentResult', 1284],
+    ['tax_return', 'taxableIncome', 89670],
+    ['income_statement', 'grossIncome', 96420],
+    ['payg_summary', 'taxWithheld', 24167],
+    ['payslip', 'grossPay', 3708.46],
+    ['super_statement', 'closingBalance', 84646],
+    ['help_statement', 'closingBalance', 25677],
+    ['deduction_receipt', 'deductionAmount', 649],
+    ['health_insurance', 'premiumsEligible', 2400],
+    ['dividend_statement', 'frankingCredits', 1500],
+    ['sole_trader_export', 'netBusinessIncome', 28500]
+  ] as const)('auto-detects and extracts the %s sample', async (documentType, field, value) => {
+    const result = await new LocalRuleBasedParser().parseDocument(
+      encode(buildSampleDocumentText(documentType)),
+      `sample-${documentType}.txt`
+    );
+
+    expect(result.documentType).toBe(documentType);
+    expect(result.extractedFields[field]?.value).toBe(value);
+    expect(result.extractedFields[field]?.sourcePage).toBe(1);
   });
 });

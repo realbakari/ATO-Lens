@@ -19,21 +19,21 @@ const PROVIDERS: {
     id: 'claude',
     tabLabel: 'Anthropic',
     placeholder: 'sk-ant-api03-…',
-    helpText: 'Claude Sonnet - PDF extraction and chat.',
+    helpText: 'Claude Sonnet - document extraction and chat.',
     destination: 'api.anthropic.com'
   },
   {
     id: 'openai',
     tabLabel: 'OpenAI',
     placeholder: 'sk-proj-…',
-    helpText: 'GPT-4o - PDF extraction and chat.',
+    helpText: 'GPT-4o - document extraction and chat.',
     destination: 'api.openai.com'
   },
   {
     id: 'gemini',
     tabLabel: 'Gemini',
     placeholder: 'AIza…',
-    helpText: 'Gemini 1.5 Pro - PDF extraction and chat.',
+    helpText: 'Gemini 1.5 Pro - document extraction and chat.',
     destination: 'generativelanguage.googleapis.com'
   }
 ];
@@ -171,7 +171,7 @@ export const ApiKeySetupModal: React.FC<ApiKeySetupModalProps> = ({ isOpen, onCl
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
           <span>
             Keys are stored in this browser's local storage as plain text - anyone with access to this machine's
-            profile can read them. Sending a document to a provider uploads the original PDF, which cannot be
+            profile can read them. Sending a document to a provider uploads the original file, which cannot be
             redacted beforehand.
           </span>
         </div>

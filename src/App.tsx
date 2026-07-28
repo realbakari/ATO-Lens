@@ -1,6 +1,11 @@
 import { useState, useEffect, useId, useMemo } from 'react';
 import { MotionConfig, motion } from 'motion/react';
-import type { AustralianFinancialYear, ExtractedValue, SourceDocument } from './types/tax';
+import type {
+  AustralianFinancialYear,
+  ExtractedValue,
+  SourceDocument,
+  TaxCopilotState
+} from './types/tax';
 import {
   loadRealFinancialYears,
   saveFinancialYears,
@@ -19,6 +24,7 @@ import { IncomeSection } from './components/income/IncomeSection';
 import { DeductionsSection } from './components/deductions/DeductionsSection';
 import { SuperSection } from './components/super/SuperSection';
 import { HELPSection } from './components/help/HELPSection';
+import { TaxCopilotSection } from './components/copilot/TaxCopilotSection';
 import { CompareYearsSection } from './components/compare/CompareYearsSection';
 import { ProvenanceDrawer } from './components/provenance/ProvenanceDrawer';
 import { UploadModal } from './components/upload/UploadModal';
@@ -33,7 +39,16 @@ import { DevTools } from './components/common/DevTools';
 import { EmptyWorkspaceState } from './components/common/EmptyWorkspaceState';
 import { FileText, ShieldCheck, EyeOff } from 'lucide-react';
 
-export type NavTab = 'overview' | 'income' | 'deductions' | 'super' | 'help' | 'compare' | 'documents' | 'privacy';
+export type NavTab =
+  | 'overview'
+  | 'copilot'
+  | 'income'
+  | 'deductions'
+  | 'super'
+  | 'help'
+  | 'compare'
+  | 'documents'
+  | 'privacy';
 
 const PARSER_ENGINE_LABELS: Record<string, string> = {
   rule_based: 'Rule-Based Local',
@@ -117,7 +132,7 @@ export function App() {
       fileType: result.documentType,
       uploadDate: new Date().toISOString().split('T')[0],
       financialYear: result.financialYear,
-      pageCount: 1,
+      pageCount: result.pageCount ?? 1,
       parsedBy,
       rawText: result.rawText,
       confidenceAverage: result.confidenceAverage
@@ -141,6 +156,17 @@ export function App() {
     if (showSampleData || !currentFy) return;
     setRealFinancialYears((prev) => {
       const updated = prev.map((fy) => (fy.id === currentFy.id ? applyManualFigure(fy, figure, value) : fy));
+      saveFinancialYears(updated);
+      return updated;
+    });
+  };
+
+  const handleTaxCopilotChange = (taxCopilot: TaxCopilotState) => {
+    if (showSampleData || !currentFy) return;
+    setRealFinancialYears((prev) => {
+      const updated = prev.map((fy) =>
+        fy.id === currentFy.id ? { ...fy, taxCopilot } : fy
+      );
       saveFinancialYears(updated);
       return updated;
     });
@@ -182,6 +208,7 @@ export function App() {
           <div className="flex items-center gap-1.5 overflow-x-auto border-b border-white/10 bg-[#0a0a0a] px-4 py-2 text-[13px] shrink-0">
             {[
               { id: 'overview', label: 'Summary Overview' },
+              { id: 'copilot', label: 'Prepare for myTax' },
               { id: 'income', label: 'Income & Employers' },
               { id: 'deductions', label: 'Work Deductions' },
               { id: 'super', label: 'Super Guarantee' },
@@ -257,6 +284,15 @@ export function App() {
               <IncomeSection
                 currentFy={currentFy}
                 onOpenProvenance={handleOpenProvenance}
+              />
+            )}
+
+            {currentFy && activeTab === 'copilot' && (
+              <TaxCopilotSection
+                currentFy={currentFy}
+                readOnly={showSampleData}
+                onChange={handleTaxCopilotChange}
+                onOpenUpload={() => setIsUploadOpen(true)}
               />
             )}
 

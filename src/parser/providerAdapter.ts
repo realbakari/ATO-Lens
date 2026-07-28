@@ -1,11 +1,12 @@
 import type { DocumentType } from '../types/tax';
-import type { ExtractProgress } from './pdfExtract';
+import type { ExtractProgress, ExtractionSource } from './pdfExtract';
 
 export interface ParsedField<T> {
   value: T;
   confidence: number;
   sourceText: string;
   sourcePage?: number;
+  userReviewed?: boolean;
 }
 
 export interface ParsedDocumentResult {
@@ -14,6 +15,8 @@ export interface ParsedDocumentResult {
   confidenceAverage: number;
   extractedFields: Record<string, ParsedField<any>>;
   rawText: string;
+  extractionSource?: ExtractionSource;
+  pageCount?: number;
 }
 
 export interface DocumentParserProvider {

@@ -3,7 +3,13 @@ import type { DocumentType } from '../types/tax';
 import { getApiKey } from '../lib/apiKeys';
 import { logNetworkActivity, redactSensitiveData } from '../storage/privacyLog';
 import { LocalRuleBasedParser } from './ruleBasedParser';
-import { EXTRACTION_SYSTEM_PROMPT, buildUserInstruction, parseModelJson, arrayBufferToBase64 } from './aiParserShared';
+import {
+  EXTRACTION_SYSTEM_PROMPT,
+  buildUserInstruction,
+  parseModelJson,
+  arrayBufferToBase64,
+  documentMimeType
+} from './aiParserShared';
 
 const CLAUDE_MODEL = 'claude-3-5-sonnet-20241022';
 
@@ -23,15 +29,24 @@ export class ClaudeDocumentParser implements DocumentParserProvider {
     const fallback = await new LocalRuleBasedParser().parseDocument(fileBuffer, fileName, documentType);
     const apiKey = getApiKey('claude');
     if (!apiKey) return fallback;
+    const mimeType = documentMimeType(fileName);
+    if (mimeType === 'text/plain') return fallback;
 
     try {
       const base64 = arrayBufferToBase64(fileBuffer);
+      const attachment =
+        mimeType.startsWith('image/')
+          ? { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } }
+          : {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: base64 }
+            };
       logNetworkActivity(
         'api.anthropic.com',
         `Uploaded ${fileName} for Claude Sonnet document extraction`,
         'allowed',
         fileBuffer.byteLength,
-        // The original PDF is sent as-is, so nothing in this payload has been
+        // The original document is sent as-is, so nothing in this payload has been
         // through redactSensitiveData(). Only the response is redacted.
         false
       );
@@ -52,7 +67,7 @@ export class ClaudeDocumentParser implements DocumentParserProvider {
             {
               role: 'user',
               content: [
-                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+                attachment,
                 { type: 'text', text: buildUserInstruction(fileName, documentType) }
               ]
             }

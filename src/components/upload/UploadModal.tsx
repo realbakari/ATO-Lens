@@ -19,14 +19,30 @@ interface UploadModalProps {
   onOpenApiKeyModal?: () => void;
 }
 
-const DOC_TYPES: { id: DocumentType; label: string }[] = [
+type DocumentSelection = DocumentType | 'auto';
+
+interface PendingUpload {
+  documentName: string;
+  fileSize: number;
+  parsedBy: ParserProviderId;
+  result: ParsedDocumentResult;
+  values: Record<string, string>;
+  included: Record<string, boolean>;
+}
+
+const DOC_TYPES: { id: DocumentSelection; label: string }[] = [
+  { id: 'auto', label: 'Auto-detect document type' },
   { id: 'notice_of_assessment', label: 'Notice of assessment' },
   { id: 'tax_return', label: 'Individual tax return' },
   { id: 'income_statement', label: 'Income statement / STP' },
+  { id: 'payg_summary', label: 'PAYG payment summary' },
   { id: 'payslip', label: 'Employer payslip' },
   { id: 'super_statement', label: 'Super fund statement' },
   { id: 'help_statement', label: 'HELP / study loan statement' },
-  { id: 'deduction_receipt', label: 'Deduction receipt' }
+  { id: 'deduction_receipt', label: 'Deduction receipt' },
+  { id: 'health_insurance', label: 'Private health insurance statement' },
+  { id: 'dividend_statement', label: 'Dividend statement' },
+  { id: 'sole_trader_export', label: 'Sole-trader accounting export' }
 ];
 
 const PROVIDERS: { id: ParserProviderId; label: string; sub: string }[] = [
@@ -37,6 +53,29 @@ const PROVIDERS: { id: ParserProviderId; label: string; sub: string }[] = [
   { id: 'ollama', label: 'Ollama', sub: 'Self-hosted' }
 ];
 
+function fieldLabel(key: string): string {
+  const labels: Record<string, string> = {
+    helpRepayment: 'HELP repayment',
+    amountWithheldPayroll: 'Payroll amount withheld',
+    reportableEmployerSuper: 'Reportable employer super',
+    incomeStatementStatus: 'Income statement status'
+  };
+  if (labels[key]) return labels[key];
+
+  const words = key
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase();
+  return words.replace(/^./, (character) => character.toUpperCase());
+}
+
+function extractionLabel(source: ParsedDocumentResult['extractionSource']): string {
+  if (source === 'ocr') return 'On-device OCR';
+  if (source === 'text_layer') return 'PDF text';
+  if (source === 'plain_text') return 'Plain text';
+  return 'Document scan';
+}
+
 export const UploadModal: React.FC<UploadModalProps> = ({
   isOpen,
   onClose,
@@ -44,11 +83,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   onOpenApiKeyModal
 }) => {
   const [selectedProvider, setSelectedProvider] = useState<ParserProviderId>('rule_based');
-  const [docType, setDocType] = useState<DocumentType>('notice_of_assessment');
+  const [docType, setDocType] = useState<DocumentSelection>('auto');
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ stage: string; percent?: number } | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const needsApiKey = isMissingApiKey(selectedProvider);
@@ -63,8 +103,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       // Captured before parsing: a parser may transfer the buffer away.
       const fileSize = buffer.byteLength;
       const parser = getDocumentParser(selectedProvider);
-      const result = await parser.parseDocument(buffer, fileName, docType, (stage, percent) =>
-        setProgress({ stage, percent })
+      const result = await parser.parseDocument(
+        buffer,
+        fileName,
+        docType === 'auto' ? undefined : docType,
+        (stage, percent) => setProgress({ stage, percent })
       );
 
       if (Object.keys(result.extractedFields).length === 0) {
@@ -74,8 +117,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         return;
       }
 
-      onDocumentParsed(fileName, fileSize, selectedProvider, result);
-      onClose();
+      const entries = Object.entries(result.extractedFields);
+      setPendingUpload({
+        documentName: fileName,
+        fileSize,
+        parsedBy: selectedProvider,
+        result,
+        values: Object.fromEntries(entries.map(([key, field]) => [key, String(field.value)])),
+        included: Object.fromEntries(entries.map(([key]) => [key, true]))
+      });
     } catch (err) {
       console.error('[ATO Lens] Document parsing failed:', err);
       setErrorMessage('Could not parse this document. The offline parser may handle it - try switching adapters.');
@@ -85,37 +135,227 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     }
   };
 
+  const closeModal = () => {
+    setPendingUpload(null);
+    setErrorMessage(null);
+    setProgress(null);
+    onClose();
+  };
+
+  const invalidReviewedNumber = pendingUpload
+    ? Object.entries(pendingUpload.result.extractedFields).some(
+        ([key, field]) =>
+          pendingUpload.included[key] &&
+          typeof field.value === 'number' &&
+          (pendingUpload.values[key].trim() === '' || !Number.isFinite(Number(pendingUpload.values[key])))
+      )
+    : false;
+
+  const includedFieldCount = pendingUpload
+    ? Object.values(pendingUpload.included).filter(Boolean).length
+    : 0;
+
+  const confirmReviewedUpload = () => {
+    if (!pendingUpload || invalidReviewedNumber || includedFieldCount === 0) return;
+
+    const extractedFields = Object.fromEntries(
+      Object.entries(pendingUpload.result.extractedFields)
+        .filter(([key]) => pendingUpload.included[key])
+        .map(([key, field]) => [
+          key,
+          {
+            ...field,
+            value:
+              typeof field.value === 'number'
+                ? Number(pendingUpload.values[key])
+                : pendingUpload.values[key].trim(),
+            userReviewed: true
+          }
+        ])
+    );
+
+    onDocumentParsed(
+      pendingUpload.documentName,
+      pendingUpload.fileSize,
+      pendingUpload.parsedBy,
+      { ...pendingUpload.result, extractedFields }
+    );
+    closeModal();
+  };
+
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
-      title="Upload a tax document"
-      subtitle="Parsed on this machine unless you pick an AI adapter"
+      onClose={closeModal}
+      title={pendingUpload ? 'Review recognised fields' : 'Upload a tax document'}
+      subtitle={
+        pendingUpload
+          ? 'Confirm every figure before it enters your workspace'
+          : 'Parsed on this machine unless you pick an AI adapter'
+      }
       icon={<UploadCloud className="h-4 w-4" />}
       size="md"
       footer={
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-[11px] text-zinc-500">
-            {selectedProvider === 'rule_based' || selectedProvider === 'ollama'
-              ? 'No data leaves this machine'
-              : 'The original PDF is uploaded to the provider'}
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              runUpload({
-                name: `sample-${docType}.txt`,
-                buffer: new TextEncoder().encode(buildSampleDocumentText(docType)).buffer as ArrayBuffer
-              })
-            }
-            disabled={isProcessing}
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 font-mono text-xs text-zinc-200 transition-colors hover:bg-zinc-700 disabled:opacity-40"
-          >
-            Try a sample document
-          </button>
-        </div>
+        pendingUpload ? (
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setPendingUpload(null);
+                setErrorMessage(null);
+              }}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={confirmReviewedUpload}
+              disabled={invalidReviewedNumber || includedFieldCount === 0}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-zinc-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Add {includedFieldCount} reviewed field{includedFieldCount === 1 ? '' : 's'}
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[11px] text-zinc-500">
+              {selectedProvider === 'rule_based' || selectedProvider === 'ollama'
+                ? 'No data leaves this machine'
+                : 'The original document is uploaded to the provider'}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const sampleType = docType === 'auto' ? 'notice_of_assessment' : docType;
+                void runUpload({
+                  name: `sample-${sampleType}.txt`,
+                  buffer: new TextEncoder().encode(buildSampleDocumentText(sampleType))
+                    .buffer as ArrayBuffer
+                });
+              }}
+              disabled={isProcessing}
+              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 font-mono text-xs text-zinc-200 transition-colors hover:bg-zinc-700 disabled:opacity-40"
+            >
+              Try a sample document
+            </button>
+          </div>
+        )
       }
     >
+      {pendingUpload ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3">
+            <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+              <span className="rounded bg-emerald-500/15 px-2 py-1 text-emerald-300">
+                {pendingUpload.parsedBy === 'rule_based' || pendingUpload.parsedBy === 'ollama'
+                  ? extractionLabel(pendingUpload.result.extractionSource)
+                  : 'AI document reading'}
+              </span>
+              <span className="rounded bg-zinc-800 px-2 py-1 text-zinc-300">
+                {fieldLabel(pendingUpload.result.documentType)}
+              </span>
+              <span className="text-zinc-500">
+                {pendingUpload.result.pageCount ?? 1} page
+                {(pendingUpload.result.pageCount ?? 1) === 1 ? '' : 's'} ·{' '}
+                {Math.round(pendingUpload.result.confidenceAverage * 100)}% average confidence
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
+              Uncheck anything that does not belong. Amber rows need extra attention because the
+              text recognition was less certain.
+            </p>
+          </div>
+
+          <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+            {Object.entries(pendingUpload.result.extractedFields).map(([key, field]) => {
+              const isIncluded = pendingUpload.included[key];
+              const isLowConfidence = field.confidence < 0.75;
+              const numericInvalid =
+                isIncluded &&
+                typeof field.value === 'number' &&
+                (pendingUpload.values[key].trim() === '' ||
+                  !Number.isFinite(Number(pendingUpload.values[key])));
+
+              return (
+                <div
+                  key={key}
+                  className={`rounded-xl border p-3 ${
+                    isLowConfidence
+                      ? 'border-amber-500/30 bg-amber-500/[0.06]'
+                      : 'border-zinc-800 bg-zinc-950'
+                  } ${isIncluded ? '' : 'opacity-50'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isIncluded}
+                      onChange={(event) =>
+                        setPendingUpload((current) =>
+                          current
+                            ? {
+                                ...current,
+                                included: { ...current.included, [key]: event.target.checked }
+                              }
+                            : current
+                        )
+                      }
+                      aria-label={`Include ${fieldLabel(key)}`}
+                      className="mt-2 h-3.5 w-3.5 accent-emerald-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label
+                          htmlFor={`ocr-field-${key}`}
+                          className="text-xs font-semibold text-zinc-200"
+                        >
+                          {fieldLabel(key)}
+                        </label>
+                        <span
+                          className={`font-mono text-[10px] ${
+                            isLowConfidence ? 'text-amber-300' : 'text-zinc-500'
+                          }`}
+                        >
+                          Page {field.sourcePage ?? 1} · {Math.round(field.confidence * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        id={`ocr-field-${key}`}
+                        type={typeof field.value === 'number' ? 'number' : 'text'}
+                        step={typeof field.value === 'number' ? 'any' : undefined}
+                        value={pendingUpload.values[key]}
+                        disabled={!isIncluded}
+                        onChange={(event) =>
+                          setPendingUpload((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  values: { ...current.values, [key]: event.target.value }
+                                }
+                              : current
+                          )
+                        }
+                        aria-invalid={numericInvalid}
+                        className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 font-mono text-xs text-zinc-100 outline-none transition-colors disabled:cursor-not-allowed ${
+                          numericInvalid
+                            ? 'border-rose-500/60'
+                            : 'border-zinc-700 focus:border-emerald-500/60'
+                        }`}
+                      />
+                      {field.sourceText && (
+                        <p className="mt-1.5 truncate font-mono text-[10px] text-zinc-600">
+                          Read from: “{field.sourceText}”
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
       <div className="space-y-5">
         <section>
           <label
@@ -127,7 +367,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <select
             id="upload-document-type"
             value={docType}
-            onChange={(e) => setDocType(e.target.value as DocumentType)}
+            onChange={(e) => setDocType(e.target.value as DocumentSelection)}
             className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-100 transition-colors focus:border-emerald-500/60 focus:outline-none"
           >
             {DOC_TYPES.map((type) => (
@@ -206,7 +446,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           id="tax-document-file"
           ref={fileInputRef}
           type="file"
-          accept="application/pdf,.pdf,.txt"
+          accept="application/pdf,text/plain,image/jpeg,image/png,image/webp,.pdf,.txt,.jpg,.jpeg,.png,.webp"
           className="sr-only"
           aria-label="Choose a tax document"
           onChange={(e) => {
@@ -258,7 +498,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 <FileText className="mx-auto h-7 w-7 text-zinc-600" />
                 <p className="text-xs font-medium text-zinc-200">Drop a file here, or choose a file</p>
                 <p className="text-[11px] text-zinc-500">
-                  Text PDFs are read directly; scans go through on-device text recognition.
+                  PDF, TXT, JPEG, PNG or WebP. Scans use on-device text recognition.
                 </p>
               </div>
             )}
@@ -275,6 +515,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           </div>
         )}
       </div>
+      )}
     </Modal>
   );
 };

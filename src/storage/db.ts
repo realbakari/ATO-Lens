@@ -42,6 +42,14 @@ export function normaliseFinancialYear(fy: AustralianFinancialYear): AustralianF
     superContributions: fy.superContributions ?? [],
     payslips: fy.payslips ?? [],
     documents: fy.documents ?? [],
+    taxCopilot: fy.taxCopilot
+      ? {
+          ...fy.taxCopilot,
+          situation: fy.taxCopilot.situation ?? {},
+          checks: fy.taxCopilot.checks ?? {},
+          fieldStatuses: fy.taxCopilot.fieldStatuses ?? {}
+        }
+      : undefined,
     alerts: fy.alerts ?? []
   };
 }

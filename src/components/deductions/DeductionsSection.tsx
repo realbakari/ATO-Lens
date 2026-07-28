@@ -8,7 +8,7 @@ interface DeductionsSectionProps {
 }
 
 const DEDUCTION_LABELS: Record<DeductionCategory, string> = {
-  vehicle_travel: 'D1. Vehicle & Travel Expenses',
+  vehicle_travel: 'D1/D2. Car & Travel — Confirm Split',
   working_from_home: 'D5. Working From Home (WFH)',
   clothing_laundry: 'D3. Work Clothing & Laundry',
   self_education: 'D4. Self-Education & Training',
@@ -17,7 +17,7 @@ const DEDUCTION_LABELS: Record<DeductionCategory, string> = {
   professional_memberships: 'D5. Union & Professional Subscriptions',
   donations: 'D9. Gifts & Tax-Deductible Donations',
   tax_agent_fees: 'D10. Cost of Managing Tax Affairs',
-  investment_expenses: 'D7. Interest & Investment Expenses',
+  investment_expenses: 'D7/D8. Investment Expenses — Confirm Split',
   other_work: 'D5. Other Work-Related Expenses'
 };
 
@@ -58,7 +58,8 @@ export const DeductionsSection: React.FC<DeductionsSectionProps> = ({
                 {missingReceipts.length} deduction(s) missing supporting receipt proof
               </span>
               <p className="text-amber-300/80 mt-0.5">
-                ATO audit guidelines require written evidence or logbook receipts for claims exceeding $300 total.
+                Claims under $300 still need a calculation basis. Receipts, logbooks, diaries or
+                other records may be required depending on the claim and method.
               </p>
             </div>
           </div>

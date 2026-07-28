@@ -37,6 +37,8 @@ export type IncomeCategory =
 export interface IncomeItem {
   id: string;
   category: IncomeCategory;
+  /** ATO return item suggested by the parser or confirmed by the user, such as I1 or I10. */
+  atoFieldCode?: string;
   description: string;
   employerOrPayer: ExtractedValue<string>;
   grossAmount: ExtractedValue<number>;
@@ -62,6 +64,8 @@ export type DeductionCategory =
 export interface DeductionItem {
   id: string;
   category: DeductionCategory;
+  /** ATO return item suggested by the parser or confirmed by the user, such as D1 or D5. */
+  atoFieldCode?: string;
   description: string;
   amount: ExtractedValue<number>;
   hasReceipt: boolean;
@@ -69,6 +73,36 @@ export interface DeductionItem {
   receiptFileName?: string;
   notes?: string;
   dateIncurred?: string;
+  evidence?: DeductionEvidence;
+}
+
+export type DeductionCalculationMethod =
+  | 'actual_cost'
+  | 'cents_per_kilometre'
+  | 'logbook'
+  | 'fixed_rate'
+  | 'decline_in_value'
+  | 'other';
+
+export type DeductionRecordType =
+  | 'receipt'
+  | 'invoice'
+  | 'bank_statement'
+  | 'logbook'
+  | 'travel_diary'
+  | 'hours_record'
+  | 'calculation'
+  | 'fund_acknowledgement'
+  | 'other';
+
+export interface DeductionEvidence {
+  calculationMethod?: DeductionCalculationMethod;
+  recordTypes: DeductionRecordType[];
+  workUsePercentage?: number;
+  wasReimbursed?: boolean;
+  periodStart?: string;
+  periodEnd?: string;
+  calculationNotes?: string;
 }
 
 export interface SuperContribution {
@@ -158,6 +192,47 @@ export interface RuleMetadata {
   sourceUrl: string;
 }
 
+export type TaxCopilotAnswer = 'yes' | 'no' | 'unsure';
+export type TaxCopilotCheckStatus = 'done' | 'not_yet' | 'not_applicable';
+export type TaxResidencyStatus = 'full_year' | 'part_year' | 'foreign' | 'unsure';
+export type TaxCopilotFieldStatus = 'needs_review' | 'confirmed' | 'not_applicable';
+export type TaxCopilotHandoffChoice = 'mytax' | 'tax_agent' | 'undecided';
+
+export interface TaxCopilotSituation {
+  residency?: TaxResidencyStatus;
+  under18?: TaxCopilotAnswer;
+  hasSpouse?: TaxCopilotAnswer;
+  hasDependants?: TaxCopilotAnswer;
+  hasPrivateHealthInsurance?: TaxCopilotAnswer;
+  hasStudyLoan?: TaxCopilotAnswer;
+  hasCapitalGains?: TaxCopilotAnswer;
+  hasRentalProperty?: TaxCopilotAnswer;
+  hasForeignIncomeOrAssets?: TaxCopilotAnswer;
+  hasBusinessOrPsi?: TaxCopilotAnswer;
+  hasTrustOrPartnershipIncome?: TaxCopilotAnswer;
+  isDeceasedEstate?: TaxCopilotAnswer;
+}
+
+export interface TaxCopilotChecks {
+  incomeStatementsTaxReady?: TaxCopilotCheckStatus;
+  prefillReviewed?: TaxCopilotCheckStatus;
+  deductionsReviewed?: TaxCopilotCheckStatus;
+  evidenceReviewed?: TaxCopilotCheckStatus;
+  medicareAndIncomeTestsReviewed?: TaxCopilotCheckStatus;
+}
+
+/**
+ * Preparation state only. Identity numbers, credentials and refund account
+ * details are intentionally excluded and must be confirmed in myTax.
+ */
+export interface TaxCopilotState {
+  situation: TaxCopilotSituation;
+  checks: TaxCopilotChecks;
+  fieldStatuses: Record<string, TaxCopilotFieldStatus>;
+  handoffChoice?: TaxCopilotHandoffChoice;
+  lastUpdated?: string;
+}
+
 export interface SourceDocument {
   id: string;
   fileName: string;
@@ -240,6 +315,7 @@ export interface AustralianFinancialYear {
   documents: SourceDocument[];
   studyLoans?: HELPAccount;
   assessment?: TaxAssessment;
+  taxCopilot?: TaxCopilotState;
   alerts: ReconciliationAlert[];
 }
 

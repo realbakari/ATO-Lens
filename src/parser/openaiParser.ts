@@ -3,13 +3,19 @@ import type { DocumentType } from '../types/tax';
 import { getApiKey } from '../lib/apiKeys';
 import { logNetworkActivity, redactSensitiveData } from '../storage/privacyLog';
 import { LocalRuleBasedParser } from './ruleBasedParser';
-import { EXTRACTION_SYSTEM_PROMPT, buildUserInstruction, parseModelJson, arrayBufferToBase64 } from './aiParserShared';
+import {
+  EXTRACTION_SYSTEM_PROMPT,
+  buildUserInstruction,
+  parseModelJson,
+  arrayBufferToBase64,
+  documentMimeType
+} from './aiParserShared';
 
 const OPENAI_MODEL = 'gpt-4o';
 
 /**
  * Sends the uploaded document directly to OpenAI's Responses API from the
- * browser using the user's own API key (PDF input via `input_file`).
+ * browser using the user's own API key (file or image input).
  */
 export class OpenAIDocumentParser implements DocumentParserProvider {
   providerId = 'openai' as const;
@@ -26,12 +32,21 @@ export class OpenAIDocumentParser implements DocumentParserProvider {
 
     try {
       const base64 = arrayBufferToBase64(fileBuffer);
+      const mimeType = documentMimeType(fileName);
+      const attachment =
+        mimeType.startsWith('image/')
+          ? { type: 'input_image', image_url: `data:${mimeType};base64,${base64}` }
+          : {
+              type: 'input_file',
+              filename: fileName,
+              file_data: `data:${mimeType};base64,${base64}`
+            };
       logNetworkActivity(
         'api.openai.com',
         `Uploaded ${fileName} for GPT-4o document extraction`,
         'allowed',
         fileBuffer.byteLength,
-        // Original PDF bytes - not redacted. Only the response is.
+        // Original document bytes - not redacted. Only the response is.
         false
       );
 
@@ -48,7 +63,7 @@ export class OpenAIDocumentParser implements DocumentParserProvider {
             {
               role: 'user',
               content: [
-                { type: 'input_file', filename: fileName, file_data: `data:application/pdf;base64,${base64}` },
+                attachment,
                 { type: 'input_text', text: buildUserInstruction(fileName, documentType) }
               ]
             }

@@ -3,13 +3,19 @@ import type { DocumentType } from '../types/tax';
 import { getApiKey } from '../lib/apiKeys';
 import { logNetworkActivity, redactSensitiveData } from '../storage/privacyLog';
 import { LocalRuleBasedParser } from './ruleBasedParser';
-import { EXTRACTION_SYSTEM_PROMPT, buildUserInstruction, parseModelJson, arrayBufferToBase64 } from './aiParserShared';
+import {
+  EXTRACTION_SYSTEM_PROMPT,
+  buildUserInstruction,
+  parseModelJson,
+  arrayBufferToBase64,
+  documentMimeType
+} from './aiParserShared';
 
 const GEMINI_MODEL = 'gemini-1.5-pro';
 
 /**
  * Sends the uploaded document directly to Google's Gemini generateContent API
- * from the browser using the user's own API key (PDF input via inlineData).
+ * from the browser using the user's own API key (file or image via inlineData).
  */
 export class GeminiDocumentParser implements DocumentParserProvider {
   providerId = 'gemini' as const;
@@ -26,12 +32,13 @@ export class GeminiDocumentParser implements DocumentParserProvider {
 
     try {
       const base64 = arrayBufferToBase64(fileBuffer);
+      const mimeType = documentMimeType(fileName);
       logNetworkActivity(
         'generativelanguage.googleapis.com',
         `Uploaded ${fileName} for Gemini 1.5 Pro document extraction`,
         'allowed',
         fileBuffer.byteLength,
-        // Original PDF bytes - not redacted. Only the response is.
+        // Original document bytes - not redacted. Only the response is.
         false
       );
 
@@ -46,7 +53,7 @@ export class GeminiDocumentParser implements DocumentParserProvider {
               {
                 role: 'user',
                 parts: [
-                  { inlineData: { mimeType: 'application/pdf', data: base64 } },
+                  { inlineData: { mimeType, data: base64 } },
                   { text: buildUserInstruction(fileName, documentType) }
                 ]
               }
