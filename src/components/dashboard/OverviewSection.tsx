@@ -14,6 +14,7 @@ import type { AustralianFinancialYear, ExtractedValue } from '../../types/tax';
 import { StatsHeaderBar } from './StatsHeaderBar';
 import { ReceiptView } from '../export/ReceiptView';
 import { SummaryTable } from './SummaryTable';
+import { ThresholdCard } from '../common/InsightCards';
 import { TaxOptimizationModal } from '../optimization/TaxOptimizationModal';
 import { ExportSummaryModal } from '../export/ExportSummaryModal';
 import { AnimatedNumber } from '../common/AnimatedNumber';
@@ -284,6 +285,8 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           </div>
         </div>
       )}
+
+      <ThresholdCard currentFy={currentFy} />
 
       {/* Compliance & Anomaly Alerts */}
       {currentFy.alerts.length > 0 && (

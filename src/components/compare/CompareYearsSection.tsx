@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GitCompare, Sparkles } from 'lucide-react';
 import type { AustralianFinancialYear } from '../../types/tax';
+import { YearChangeCard } from '../common/InsightCards';
 
 interface CompareYearsSectionProps {
   financialYears: AustralianFinancialYear[];
@@ -43,12 +44,17 @@ export const CompareYearsSection: React.FC<CompareYearsSectionProps> = ({ financ
     { label: 'Employer super', valA: fyA.employerSuper, valB: fyB.employerSuper }
   ];
 
+  // fyA is the earlier year in the selectors; the card reads newest-first.
+  const orderedForChange = fyA.id <= fyB.id ? [fyB, fyA] : [fyA, fyB];
+
   const grossDiff = calcChange(fyA.grossIncome, fyB.grossIncome);
   const refundDiff = calcChange(fyA.assessmentResult, fyB.assessmentResult);
   const helpDiff = calcChange(fyA.helpRepayment, fyB.helpRepayment);
 
   return (
     <div className="space-y-6">
+      <YearChangeCard years={orderedForChange} />
+
       {/* Header & Year Selectors */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>

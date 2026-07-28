@@ -1,6 +1,7 @@
 import React from 'react';
 import { GraduationCap, Calendar } from 'lucide-react';
 import type { AustralianFinancialYear, ExtractedValue } from '../../types/tax';
+import { IndexationCard } from '../common/InsightCards';
 
 interface HELPSectionProps {
   currentFy: AustralianFinancialYear;
@@ -41,6 +42,8 @@ export const HELPSection: React.FC<HELPSectionProps> = ({ currentFy, onOpenProve
           Closing Balance: <strong className="text-zinc-100 font-bold">${loan.closingBalance.value.toLocaleString()}</strong>
         </div>
       </div>
+
+      <IndexationCard currentFy={currentFy} />
 
       {/* Main Loan Metrics Grid */}
       <div className="glass-panel p-6">
