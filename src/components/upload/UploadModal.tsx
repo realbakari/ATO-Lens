@@ -60,6 +60,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     try {
       const fileName = file.name;
       const buffer = file instanceof File ? await file.arrayBuffer() : file.buffer;
+      // Captured before parsing: a parser may transfer the buffer away.
+      const fileSize = buffer.byteLength;
       const parser = getDocumentParser(selectedProvider);
       const result = await parser.parseDocument(buffer, fileName, docType, (stage, percent) =>
         setProgress({ stage, percent })
@@ -72,7 +74,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         return;
       }
 
-      onDocumentParsed(fileName, buffer.byteLength, selectedProvider, result);
+      onDocumentParsed(fileName, fileSize, selectedProvider, result);
       onClose();
     } catch (err) {
       console.error('[ATO Lens] Document parsing failed:', err);

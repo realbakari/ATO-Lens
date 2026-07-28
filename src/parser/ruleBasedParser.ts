@@ -1,7 +1,12 @@
 import type { DocumentParserProvider, ParsedDocumentResult, ParsedField } from './providerAdapter';
 import type { DocumentType } from '../types/tax';
 import { redactSensitiveData, logNetworkActivity } from '../storage/privacyLog';
-import { extractDocumentText, type ExtractProgress, type PdfExtraction } from './pdfExtract';
+import {
+  confidenceForSnippet,
+  extractDocumentText,
+  type ExtractProgress,
+  type PdfExtraction
+} from './pdfExtract';
 
 export class LocalRuleBasedParser implements DocumentParserProvider {
   providerId = 'rule_based' as const;
@@ -101,13 +106,23 @@ export class LocalRuleBasedParser implements DocumentParserProvider {
       ? confidences.reduce((sum, c) => sum + c, 0) / confidences.length
       : 0;
 
-    // A figure recognised from a scan is only as trustworthy as the recognition
-    // that produced it, so the page confidence caps the field confidence.
-    if (extraction?.source === 'ocr' && extraction.ocrConfidence !== undefined) {
-      confidenceAverage *= extraction.ocrConfidence;
+    // A figure recognised from a scan is only as trustworthy as its own reading.
+    // Scoring each field on the words behind it, rather than the page average,
+    // avoids scanner noise in a logo dragging down a cleanly-read dollar amount.
+    if (extraction?.source === 'ocr') {
       for (const field of Object.values(extractedFields)) {
-        field.confidence *= extraction.ocrConfidence;
+        // Once the digits are read correctly the pattern match is certain, so
+        // the recognition of the figure itself is the whole uncertainty.
+        field.confidence =
+          confidenceForSnippet(extraction.words, field.sourceText ?? '') ??
+          extraction.ocrConfidence ??
+          field.confidence;
       }
+
+      const scored = Object.values(extractedFields).map((f) => f.confidence);
+      confidenceAverage = scored.length
+        ? scored.reduce((sum, c) => sum + c, 0) / scored.length
+        : (extraction.ocrConfidence ?? 0);
     }
 
     return {
