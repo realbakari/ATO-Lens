@@ -47,14 +47,14 @@ export const StatsHeaderBar: React.FC<StatsHeaderBarProps> = ({
   };
 
   return (
-    <div className="@container rounded-xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm subpixel-antialiased">
+    <div className="@container border-b border-white/10 px-1 pb-5 subpixel-antialiased">
       <div className="grid grid-cols-2 items-center gap-4 @2xl:grid-cols-3 @4xl:grid-cols-5">
         {/* Selected Year Identifier */}
         <div className="col-span-2 @2xl:col-span-1">
-          <div className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
+          <div className="text-2xl font-semibold text-zinc-100 tracking-tight">
             {selectedFy.label}
           </div>
-          <span className="inline-block mt-0.5 text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800 font-semibold">
+          <span className="mt-0.5 inline-block text-[10px] font-medium uppercase tracking-wide text-zinc-500">
             Selected AU FY
           </span>
         </div>
@@ -66,7 +66,7 @@ export const StatsHeaderBar: React.FC<StatsHeaderBarProps> = ({
             <span className="text-xl font-bold font-mono text-zinc-100">
               ${(selectedFy.grossIncome / 1000).toFixed(1)}k
             </span>
-            <Sparkline values={grossValues} width={45} height={18} className="text-emerald-400" />
+            <Sparkline values={grossValues} width={45} height={18} className="text-blue-500" />
           </div>
         </div>
 
@@ -77,7 +77,7 @@ export const StatsHeaderBar: React.FC<StatsHeaderBarProps> = ({
             <span className="text-xl font-bold font-mono text-zinc-100">
               ${(selectedFy.taxWithheld / 1000).toFixed(1)}k
             </span>
-            <Sparkline values={taxValues} width={45} height={18} className="text-emerald-400" />
+            <Sparkline values={taxValues} width={45} height={18} className="text-blue-500" />
           </div>
         </div>
 
@@ -88,7 +88,7 @@ export const StatsHeaderBar: React.FC<StatsHeaderBarProps> = ({
             <span className="text-xl font-bold font-mono text-emerald-400">
               {hasGrossIncome ? `$${(netIncome / 1000).toFixed(1)}k` : '—'}
             </span>
-            <Sparkline values={netValues} width={45} height={18} className="text-emerald-400" />
+            <Sparkline values={netValues} width={45} height={18} className="text-blue-500" />
           </div>
         </div>
 
@@ -98,7 +98,8 @@ export const StatsHeaderBar: React.FC<StatsHeaderBarProps> = ({
             <select
               value={timeUnit}
               onChange={(e) => setTimeUnit(e.target.value as TimeUnit)}
-              className="bg-zinc-900 border border-zinc-800 rounded-full px-2 py-0.5 text-[11px] text-zinc-300 hover:text-zinc-100 font-mono font-medium focus:outline-none cursor-pointer"
+              aria-label="Net income time unit"
+              className="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-zinc-300 hover:text-zinc-100 focus:outline-none"
             >
               <option value="hourly">Hourly Rate</option>
               <option value="daily">Daily Net</option>

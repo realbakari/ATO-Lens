@@ -76,10 +76,11 @@ export const DeductionsSection: React.FC<DeductionsSectionProps> = ({
 
         <div className="divide-y divide-zinc-800/60 text-sm">
           {currentFy.deductions.map((ded) => (
-            <div
+            <button
               key={ded.id}
+              type="button"
               onClick={() => onOpenProvenance(ded.description, ded.amount)}
-              className="p-4 hover:bg-zinc-900/60 transition-colors cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+              className="flex w-full flex-col justify-between gap-4 p-4 text-left transition-colors hover:bg-zinc-900/60 md:flex-row md:items-center"
             >
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -110,7 +111,7 @@ export const DeductionsSection: React.FC<DeductionsSectionProps> = ({
                 </div>
                 <div className="text-xs text-zinc-500">Tax Return Item</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>

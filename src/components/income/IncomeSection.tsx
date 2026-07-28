@@ -1,6 +1,7 @@
 import React from 'react';
 import { DollarSign, Briefcase, Clock } from 'lucide-react';
 import type { AustralianFinancialYear, IncomeCategory, ExtractedValue } from '../../types/tax';
+import { getSuperGuaranteeRule } from '../../engine/superGuaranteeAudit';
 
 interface IncomeSectionProps {
   currentFy: AustralianFinancialYear;
@@ -27,6 +28,7 @@ export const IncomeSection: React.FC<IncomeSectionProps> = ({
 }) => {
   const totalGross = currentFy.income.reduce((sum, item) => sum + item.grossAmount.value, 0);
   const totalTaxWithheld = currentFy.income.reduce((sum, item) => sum + item.taxWithheld.value, 0);
+  const sgRate = getSuperGuaranteeRule(currentFy.id).rate;
 
   return (
     <div className="space-y-6">
@@ -62,10 +64,11 @@ export const IncomeSection: React.FC<IncomeSectionProps> = ({
 
         <div className="divide-y divide-zinc-800/60 text-sm">
           {currentFy.income.map((item) => (
-            <div
+            <button
               key={item.id}
+              type="button"
               onClick={() => onOpenProvenance(`${CATEGORY_LABELS[item.category]} - ${item.description}`, item.grossAmount)}
-              className="p-4 hover:bg-zinc-900/60 transition-colors cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+              className="flex w-full flex-col justify-between gap-4 p-4 text-left transition-colors hover:bg-zinc-900/60 md:flex-row md:items-center"
             >
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -98,7 +101,7 @@ export const IncomeSection: React.FC<IncomeSectionProps> = ({
                   </div>
                 )}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -120,7 +123,7 @@ export const IncomeSection: React.FC<IncomeSectionProps> = ({
                   <th className="p-3">Ordinary Hrs</th>
                   <th className="p-3">Gross Pay</th>
                   <th className="p-3">Net Pay</th>
-                  <th className="p-3">12% Super</th>
+                  <th className="p-3">{sgRate === null ? 'SG Super' : `${sgRate.toFixed(1)}% Super`}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">

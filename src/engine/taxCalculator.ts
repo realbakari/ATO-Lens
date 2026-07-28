@@ -2,6 +2,7 @@
  * Australian Income Tax & Offsets Engine
  * Supports Stage 3 tax brackets, Medicare Levy, LITO, and HELP repayments.
  */
+import type { RuleMetadata } from '../types/tax';
 
 export interface TaxCalculationResult {
   taxableIncome: number;
@@ -13,6 +14,7 @@ export interface TaxCalculationResult {
   totalTaxAndObligations: number;
   effectiveTaxRate: number;
   assessmentResult: number; // taxWithheld - totalTaxAndObligations
+  medicareRule: RuleMetadata;
 }
 
 // Resident bracket thresholds. These are unchanged across the years modelled
@@ -77,22 +79,60 @@ export function calculateLITO(taxableIncome: number): number {
   return 0;
 }
 
+interface MedicareSchedule {
+  lowerThreshold: number;
+  upperThreshold: number;
+  rate: number;
+  sourceUrl: string;
+}
+
+// 2024-25 single, non-SAPTO thresholds from ATO myTax 2025 Medicare levy
+// reduction or exemption: https://www.ato.gov.au/myTax25MedicareLevy
+const MEDICARE_SCHEDULES: Record<string, MedicareSchedule> = {
+  '2024-25': {
+    lowerThreshold: 27_222,
+    upperThreshold: 34_027,
+    rate: 0.02,
+    sourceUrl: 'https://www.ato.gov.au/myTax25MedicareLevy'
+  }
+};
+
+const LATEST_MEDICARE_YEAR = '2024-25';
+
+export interface MedicareLevyResult {
+  amount: number;
+  rule: RuleMetadata;
+}
+
+export function calculateMedicareLevyResult(
+  taxableIncome: number,
+  financialYearId: string = LATEST_MEDICARE_YEAR
+): MedicareLevyResult {
+  const exact = MEDICARE_SCHEDULES[financialYearId];
+  const schedule = exact ?? MEDICARE_SCHEDULES[LATEST_MEDICARE_YEAR];
+  const rule: RuleMetadata = {
+    status: exact ? 'exact' : 'estimated',
+    requestedYear: financialYearId,
+    sourceYear: exact ? financialYearId : LATEST_MEDICARE_YEAR,
+    sourceUrl: schedule.sourceUrl
+  };
+  const { lowerThreshold, upperThreshold, rate } = schedule;
+  let amount = 0;
+  if (taxableIncome > lowerThreshold && taxableIncome <= upperThreshold) {
+    amount = (taxableIncome - lowerThreshold) * 0.1;
+  } else if (taxableIncome > upperThreshold) {
+    amount = taxableIncome * rate;
+  }
+  return { amount, rule };
+}
+
 /**
- * Medicare levy at 2%, with the low-income shade-in for singles.
- * Per ATO "Medicare levy reduction for low-income earners" (verified 28 July 2026):
- * ato.gov.au/individuals-and-families/medicare-and-private-health-insurance/medicare-levy/medicare-levy-reduction/medicare-levy-reduction-for-low-income-earners
- *
- * These are the single-taxpayer thresholds. Family and SAPTO thresholds are
- * higher and are not modelled, so anyone in those categories may see too much
- * levy here. The 2025-26 figures are applied to later years until the ATO
- * publishes new ones.
+ * Medicare levy estimate for a single taxpayer without SAPTO/family settings.
+ * Unsupported years use the latest published schedule and are marked estimated
+ * by calculateMedicareLevyResult; callers displaying the value must show that.
  */
-export function calculateMedicareLevy(taxableIncome: number): number {
-  const LOWER_THRESHOLD = 28011; // 2025-26 single lower threshold (no levy payable at/below this)
-  const UPPER_THRESHOLD = 35013; // 2025-26 single upper threshold (full 2% levy applies above this)
-  if (taxableIncome <= LOWER_THRESHOLD) return 0;
-  if (taxableIncome <= UPPER_THRESHOLD) return (taxableIncome - LOWER_THRESHOLD) * 0.10; // Shade-in rate
-  return taxableIncome * 0.02;
+export function calculateMedicareLevy(taxableIncome: number, financialYearId?: string): number {
+  return calculateMedicareLevyResult(taxableIncome, financialYearId).amount;
 }
 
 /**
@@ -204,7 +244,9 @@ export function calculateDeductionSaving(
     const capped = Math.max(0, income);
     const netTax = Math.max(0, calculateResidentIncomeTax(capped, financialYearId) - calculateLITO(capped));
     return (
-      netTax + calculateMedicareLevy(capped) + (hasHELP ? calculateHELPRepayment(capped, financialYearId) : 0)
+      netTax +
+      calculateMedicareLevy(capped, financialYearId) +
+      (hasHELP ? calculateHELPRepayment(capped, financialYearId) : 0)
     );
   };
 
@@ -225,7 +267,11 @@ export function calculateFullAustralianTax(
   const grossTax = calculateResidentIncomeTax(taxableIncome, financialYearId);
   const litoOffset = calculateLITO(taxableIncome);
   const netTaxAfterOffsets = Math.max(0, grossTax - litoOffset);
-  const medicareLevy = calculateMedicareLevy(taxableIncome);
+  const medicare = calculateMedicareLevyResult(
+    taxableIncome,
+    financialYearId ?? LATEST_MEDICARE_YEAR
+  );
+  const medicareLevy = medicare.amount;
   const helpRepayment = hasHELP ? calculateHELPRepayment(taxableIncome, financialYearId) : 0;
 
   const totalTaxAndObligations = netTaxAfterOffsets + medicareLevy + helpRepayment;
@@ -241,6 +287,7 @@ export function calculateFullAustralianTax(
     helpRepayment,
     totalTaxAndObligations,
     effectiveTaxRate: Math.round(effectiveTaxRate * 10) / 10,
-    assessmentResult: Math.round(assessmentResult)
+    assessmentResult: Math.round(assessmentResult),
+    medicareRule: medicare.rule
   };
 }

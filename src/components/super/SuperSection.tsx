@@ -1,7 +1,10 @@
 import React from 'react';
 import { PiggyBank, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { AustralianFinancialYear, ExtractedValue } from '../../types/tax';
-import { auditSuperGuarantee } from '../../engine/superGuaranteeAudit';
+import {
+  auditSuperGuarantee,
+  expectedSuperAmount
+} from '../../engine/superGuaranteeAudit';
 
 interface SuperSectionProps {
   currentFy: AustralianFinancialYear;
@@ -13,6 +16,20 @@ export const SuperSection: React.FC<SuperSectionProps> = ({
   onOpenProvenance
 }) => {
   const auditReport = auditSuperGuarantee(currentFy.superContributions, currentFy.label);
+  const rateLabel =
+    auditReport.rule.rate === null ? 'Unavailable' : `${auditReport.rule.rate.toFixed(1)}%`;
+  const statusLabel =
+    auditReport.status === 'no_data'
+      ? 'No auditable records'
+      : auditReport.status === 'compliant'
+        ? `${auditReport.complianceRate}% compliant`
+        : `${auditReport.complianceRate}% recorded`;
+  const statusClass =
+    auditReport.status === 'compliant'
+      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+      : auditReport.status === 'shortfall'
+        ? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+        : 'border-amber-500/20 bg-amber-500/10 text-amber-300';
 
   return (
     <div className="space-y-6">
@@ -24,7 +41,7 @@ export const SuperSection: React.FC<SuperSectionProps> = ({
             <span>Superannuation Guarantee Tracker & Audit</span>
           </h2>
           <p className="text-xs text-zinc-400">
-            Automated compliance check against Australia's 12.0% Super Guarantee standard ({currentFy.label})
+            Automated compliance check against Australia's {rateLabel} Super Guarantee standard ({currentFy.label})
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -39,16 +56,22 @@ export const SuperSection: React.FC<SuperSectionProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-semibold text-zinc-200 text-sm">12.0% SG Compliance Audit Status</h3>
+            <h3 className="font-semibold text-zinc-200 text-sm">{rateLabel} SG Compliance Audit Status</h3>
           </div>
-          <span className="font-mono text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20">
-            {auditReport.complianceRate}% Compliant
+          <span className={`rounded border px-2.5 py-1 font-mono text-xs font-bold ${statusClass}`}>
+            {statusLabel}
           </span>
         </div>
 
+        {auditReport.status === 'no_data' && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-100">
+            Upload an income statement, payslip, or super fund statement with ordinary-time earnings and employer contributions to run this audit.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
           <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
-            <span className="text-zinc-400">Expected SG (12.0%)</span>
+            <span className="text-zinc-400">Expected SG ({rateLabel})</span>
             <div className="text-lg font-bold text-zinc-100">${auditReport.totalExpectedSuper.toLocaleString()}</div>
           </div>
           <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
@@ -81,27 +104,40 @@ export const SuperSection: React.FC<SuperSectionProps> = ({
                 <th className="p-3">Employer</th>
                 <th className="p-3">Fund Name</th>
                 <th className="p-3">Received Date</th>
-                <th className="p-3">Expected (12%)</th>
+                <th className="p-3">Expected ({rateLabel})</th>
                 <th className="p-3">Recorded</th>
                 <th className="p-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60">
               {currentFy.superContributions.map((contrib) => {
-                const diff = contrib.expectedAmount - contrib.recordedAmount.value;
+                const expected = expectedSuperAmount(contrib, currentFy.label);
+                const diff = expected - contrib.recordedAmount.value;
                 return (
                   <tr
                     key={contrib.id}
-                    onClick={() => onOpenProvenance(`${contrib.employerName.value} Super`, contrib.recordedAmount)}
-                    className="hover:bg-zinc-900/60 cursor-pointer"
+                    className="hover:bg-zinc-900/60"
                   >
                     <td className="p-3 text-zinc-300">
                       {contrib.periodStart} to {contrib.periodEnd}
                     </td>
-                    <td className="p-3 font-semibold text-zinc-200">{contrib.employerName.value}</td>
+                    <td className="p-3 font-semibold text-zinc-200">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenProvenance(
+                            `${contrib.employerName.value} Super`,
+                            contrib.recordedAmount
+                          )
+                        }
+                        className="rounded text-left underline decoration-zinc-700 underline-offset-2 hover:text-emerald-300"
+                      >
+                        {contrib.employerName.value}
+                      </button>
+                    </td>
                     <td className="p-3 text-zinc-400">{contrib.fundName.value}</td>
                     <td className="p-3 text-zinc-300">{contrib.payDate.value}</td>
-                    <td className="p-3 text-zinc-400">${contrib.expectedAmount.toFixed(2)}</td>
+                    <td className="p-3 text-zinc-400">${expected.toFixed(2)}</td>
                     <td className="p-3 font-bold text-zinc-200">${contrib.recordedAmount.value.toFixed(2)}</td>
                     <td className="p-3">
                       {diff > 5 ? (

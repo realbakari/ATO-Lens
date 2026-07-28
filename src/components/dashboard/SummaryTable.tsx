@@ -58,7 +58,7 @@ export const SummaryTable: React.FC<SummaryTableProps> = ({ financialYears }) =>
     {
       title: 'Superannuation & Final Assessment',
       items: [
-        { label: 'Employer super (12% SG)', calc: (fy: AustralianFinancialYear) => fy.employerSuper, showChange: true },
+        { label: 'Employer super (SG)', calc: (fy: AustralianFinancialYear) => fy.employerSuper, showChange: true },
         { label: 'Notice of Assessment result', calc: (fy: AustralianFinancialYear) => fy.assessmentResult, isBold: true, showChange: true }
       ]
     }

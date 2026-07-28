@@ -137,6 +137,27 @@ export interface TaxAssessment {
   lodgedReturnDiffs?: string[];
 }
 
+export type EditableFigure =
+  | 'grossIncome'
+  | 'taxableIncome'
+  | 'taxWithheld'
+  | 'totalDeductions'
+  | 'medicareLevy'
+  | 'helpRepayment'
+  | 'assessmentResult'
+  | 'employerSuper';
+
+export type FigureOrigin = 'document' | 'manual' | 'derived';
+
+export type RuleStatus = 'exact' | 'estimated' | 'unsupported';
+
+export interface RuleMetadata {
+  status: RuleStatus;
+  requestedYear: string;
+  sourceYear?: string;
+  sourceUrl: string;
+}
+
 export interface SourceDocument {
   id: string;
   fileName: string;
@@ -200,11 +221,16 @@ export interface AustralianFinancialYear {
   employerSuper: number;
   employerCount: number;
   effectiveTaxRate: number; // percentage
+  medicareRule?: RuleMetadata;
+
+  /** Origin of each headline value. Missing means the value has not been supplied yet. */
+  figureOrigins?: Partial<Record<EditableFigure, FigureOrigin>>;
 
   /**
-   * Figures the user corrected by hand. These are authoritative and are never
-   * recalculated, so a correction is not silently overwritten by the engine.
+   * Legacy flag retained while v1 workspaces migrate to figureOrigins.
+   * New writes use figureOrigins instead.
    */
+  /** @deprecated */
   manualOverrides?: Partial<Record<string, boolean>>;
 
   income: IncomeItem[];

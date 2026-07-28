@@ -9,11 +9,12 @@ const {
 
 function setupAboutPanelAndMenu() {
   const iconPath = path.join(__dirname, 'assets/icon.png');
+  const applicationVersion = app.getVersion();
 
   app.setAboutPanelOptions({
     applicationName: 'ATO Lens',
-    applicationVersion: '1.0.0',
-    version: '1.0.0',
+    applicationVersion,
+    version: applicationVersion,
     copyright: 'Copyright © 2026 Bakari Mustafa',
     credits: 'Local-first Australian tax, income, super and HELP workspace.',
     website: 'https://github.com/realbakari/ATO-Lens',

@@ -118,8 +118,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     >
       <div className="space-y-5">
         <section>
-          <SectionLabel>Document type</SectionLabel>
+          <label
+            htmlFor="upload-document-type"
+            className="mb-2 block font-mono text-[10px] font-semibold uppercase tracking-wider text-zinc-500"
+          >
+            Document type
+          </label>
           <select
+            id="upload-document-type"
             value={docType}
             onChange={(e) => setDocType(e.target.value as DocumentType)}
             className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-100 transition-colors focus:border-emerald-500/60 focus:outline-none"
@@ -134,7 +140,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         <section>
           <SectionLabel>Parser</SectionLabel>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div
+            className="grid grid-cols-2 gap-1.5 sm:grid-cols-5"
+            role="radiogroup"
+            aria-label="Document parser"
+          >
             {PROVIDERS.map((provider) => {
               const isActive = selectedProvider === provider.id;
               const missingKey = isMissingApiKey(provider.id);
@@ -142,19 +152,21 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 <button
                   key={provider.id}
                   type="button"
+                  role="radio"
+                  aria-checked={isActive}
                   onClick={() => {
                     setSelectedProvider(provider.id);
                     setErrorMessage(null);
                   }}
                   className={`rounded-lg border px-2 py-2 text-center transition-colors ${
                     isActive
-                      ? 'border-emerald-500/50 bg-emerald-500/10'
+                      ? 'border-blue-500/50 bg-blue-500/10'
                       : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
                   }`}
                 >
                   <div
                     className={`truncate font-mono text-[11px] font-semibold ${
-                      isActive ? 'text-emerald-300' : 'text-zinc-300'
+                      isActive ? 'text-blue-300' : 'text-zinc-300'
                     }`}
                   >
                     {provider.label}
@@ -191,10 +203,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         </section>
 
         <input
+          id="tax-document-file"
           ref={fileInputRef}
           type="file"
           accept="application/pdf,.pdf,.txt"
-          className="hidden"
+          className="sr-only"
+          aria-label="Choose a tax document"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) void runUpload(file);
@@ -202,7 +216,6 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           }}
         />
         <div
-          onClick={() => !isProcessing && fileInputRef.current?.click()}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
@@ -214,39 +227,49 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             const file = e.dataTransfer.files?.[0];
             if (file) void runUpload(file);
           }}
-          className={`cursor-pointer rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors ${
-            dragOver ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'
+          className={`rounded-xl border-2 border-dashed transition-colors ${
+            dragOver ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 bg-white/[0.02]'
           }`}
         >
-          {isProcessing ? (
-            <div className="space-y-2.5">
-              <BrailleSpinner className="block h-7 text-center font-mono text-2xl leading-none text-emerald-400" />
-              <p className="font-mono text-xs font-medium text-emerald-400">
-                {progress?.stage ?? 'Reading tax fields'}…
-              </p>
-              {progress?.percent !== undefined && (
-                <div className="mx-auto h-1 w-40 overflow-hidden rounded-full bg-zinc-800">
-                  <div
-                    className="h-full bg-emerald-500 transition-[width] duration-200"
-                    style={{ width: `${Math.min(100, Math.round(progress.percent))}%` }}
-                  />
-                </div>
-              )}
-              <p className="text-[11px] text-zinc-500">Runs on this machine</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <FileText className="mx-auto h-7 w-7 text-zinc-600" />
-              <p className="text-xs font-medium text-zinc-200">Drop a file here, or click to browse</p>
-              <p className="text-[11px] text-zinc-500">
-                Text PDFs are read directly; scans go through on-device text recognition.
-              </p>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isProcessing}
+            className="w-full cursor-pointer rounded-[10px] px-6 py-8 text-center transition-colors hover:bg-zinc-900/50 disabled:cursor-wait"
+          >
+            {isProcessing ? (
+              <div className="space-y-2.5" role="status" aria-live="polite">
+                <BrailleSpinner className="block h-7 text-center font-mono text-2xl leading-none text-blue-400" />
+                <p className="font-mono text-xs font-medium text-blue-400">
+                  {progress?.stage ?? 'Reading tax fields'}…
+                </p>
+                {progress?.percent !== undefined && (
+                  <div className="mx-auto h-1 w-40 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full bg-blue-500 transition-[width] duration-200"
+                      style={{ width: `${Math.min(100, Math.round(progress.percent))}%` }}
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] text-zinc-500">Runs on this machine</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <FileText className="mx-auto h-7 w-7 text-zinc-600" />
+                <p className="text-xs font-medium text-zinc-200">Drop a file here, or choose a file</p>
+                <p className="text-[11px] text-zinc-500">
+                  Text PDFs are read directly; scans go through on-device text recognition.
+                </p>
+              </div>
+            )}
+          </button>
         </div>
 
         {errorMessage && (
-          <div className="flex gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-rose-300">
+          <div
+            role="alert"
+            className="flex gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-rose-300"
+          >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{errorMessage}</span>
           </div>

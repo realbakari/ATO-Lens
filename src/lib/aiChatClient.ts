@@ -1,4 +1,5 @@
 import { getApiKey, type AiProviderId } from './apiKeys';
+import { logNetworkActivity, redactSensitiveData } from '../storage/privacyLog';
 
 export interface ChatTurn {
   role: 'user' | 'assistant';
@@ -41,6 +42,29 @@ export async function sendChatMessage(
 ): Promise<string> {
   const apiKey = getApiKey(provider);
   if (!apiKey) throw new Error(`No API key configured for ${provider}`);
+  const safeSystemPrompt = redactSensitiveData(systemPrompt);
+  const safeHistory = history.map((turn) => ({
+    ...turn,
+    text: redactSensitiveData(turn.text)
+  }));
+  const safeMessage = redactSensitiveData(message);
+  const destination =
+    provider === 'claude'
+      ? 'api.anthropic.com'
+      : provider === 'openai'
+        ? 'api.openai.com'
+        : 'generativelanguage.googleapis.com';
+  const bytesSent = new TextEncoder().encode(
+    `${safeSystemPrompt}\n${safeHistory.map((turn) => turn.text).join('\n')}\n${safeMessage}`
+  ).byteLength;
+
+  logNetworkActivity(
+    destination,
+    'AI chat request about local tax history',
+    'allowed',
+    bytesSent,
+    true
+  );
 
   if (provider === 'claude') {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -54,8 +78,11 @@ export async function sendChatMessage(
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         max_tokens: 1024,
-        system: systemPrompt,
-        messages: [...history.map((h) => ({ role: h.role, content: h.text })), { role: 'user', content: message }]
+        system: safeSystemPrompt,
+        messages: [
+          ...safeHistory.map((h) => ({ role: h.role, content: h.text })),
+          { role: 'user', content: safeMessage }
+        ]
       })
     });
     if (!res.ok) throw new Error(`Claude chat error ${res.status}`);
@@ -73,9 +100,9 @@ export async function sendChatMessage(
       body: JSON.stringify({
         model: OPENAI_MODEL,
         messages: [
-          { role: 'system', content: systemPrompt },
-          ...history.map((h) => ({ role: h.role, content: h.text })),
-          { role: 'user', content: message }
+          { role: 'system', content: safeSystemPrompt },
+          ...safeHistory.map((h) => ({ role: h.role, content: h.text })),
+          { role: 'user', content: safeMessage }
         ]
       })
     });
@@ -91,10 +118,13 @@ export async function sendChatMessage(
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
+        systemInstruction: { parts: [{ text: safeSystemPrompt }] },
         contents: [
-          ...history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.text }] })),
-          { role: 'user', parts: [{ text: message }] }
+          ...safeHistory.map((h) => ({
+            role: h.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: h.text }]
+          })),
+          { role: 'user', parts: [{ text: safeMessage }] }
         ]
       })
     }

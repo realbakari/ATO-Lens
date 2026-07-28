@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
+import { motion } from 'motion/react';
 import { ShieldCheck, MessageSquare, Menu, FilePlus, Key, HelpCircle, Trash2, Eye, EyeOff } from 'lucide-react';
 import type { AustralianFinancialYear } from '../../types/tax';
 import { isMacElectron } from '../../lib/electron';
@@ -31,31 +32,34 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSampleData
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const yearHighlightId = useId();
   const isMac = isMacElectron();
 
   return (
     <header
-      className={`h-14 bg-zinc-950 border-b border-zinc-800/80 pr-4 sm:pr-6 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md bg-zinc-950/90 app-window-drag select-none ${
-        isMac ? 'pl-[90px]' : 'pl-4 sm:pl-6'
+      className={`h-14 bg-zinc-950 border-b border-zinc-800/80 pr-2 sm:pr-6 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md bg-zinc-950/90 app-window-drag select-none ${
+        isMac ? 'pl-[90px]' : 'pl-2 sm:pl-6'
       }`}
     >
       {/* Brand & Financial Year Selector */}
-      <div className="flex items-center gap-3 app-window-no-drag shrink-0">
-        <span className="font-bold text-sm tracking-tight text-zinc-100 font-mono">
+      <div className="flex items-center gap-1.5 sm:gap-3 app-window-no-drag shrink-0">
+        <span className="text-sm font-semibold tracking-tight text-zinc-100">
           ATO Lens
         </span>
 
         <div className="relative">
           <button
+            type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="Open application menu"
+            aria-expanded={isMenuOpen}
             className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors"
-            title="Menu"
           >
             <Menu className="w-4 h-4" />
           </button>
 
           {isMenuOpen && (
-            <div className="menu-popup absolute left-0 mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 p-1 font-mono text-xs app-window-no-drag">
+            <div className="menu-popup absolute left-0 z-50 mt-2 w-56 rounded-xl border border-white/10 bg-[#151515] p-1 text-xs shadow-2xl app-window-no-drag">
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
@@ -63,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }}
                 className="w-full text-left px-3 py-2 rounded-lg hover:bg-zinc-800 text-zinc-200 flex items-center gap-2"
               >
-                <FilePlus className="w-4 h-4 text-emerald-400" />
+                <FilePlus className="w-4 h-4 text-blue-400" />
                 <span>Upload Document</span>
               </button>
               {onOpenApiKeyModal && (
@@ -74,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }}
                   className="w-full text-left px-3 py-2 rounded-lg hover:bg-zinc-800 text-zinc-200 flex items-center gap-2"
                 >
-                  <Key className="w-4 h-4 text-emerald-400" />
+                  <Key className="w-4 h-4 text-blue-400" />
                   <span>API Key Setup</span>
                 </button>
               )}
@@ -139,46 +143,79 @@ export const Navbar: React.FC<NavbarProps> = ({
           {financialYears.map((fy) => (
             <button
               key={fy.id}
+              type="button"
               onClick={() => onSelectFy(fy.id)}
-              className={`px-3 py-1 rounded text-xs font-mono font-medium transition-all ${
+              aria-pressed={selectedFyId === fy.id}
+              className={`relative px-3 py-1 rounded text-xs font-medium transition-colors ${
                 selectedFyId === fy.id
-                  ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-sm'
+                  ? 'text-zinc-100 font-semibold'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              {fy.label}
+              {selectedFyId === fy.id && (
+                <motion.span
+                  layoutId={yearHighlightId}
+                  className="absolute inset-0 rounded bg-zinc-800 shadow-sm"
+                  initial={false}
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className="relative z-10">{fy.label}</span>
             </button>
           ))}
         </div>
+
+        <label className="flex items-center lg:hidden">
+          <span className="sr-only">Financial year</span>
+          <select
+            aria-label="Financial year"
+            value={selectedFyId}
+            onChange={(event) => onSelectFy(event.target.value)}
+            disabled={financialYears.length === 0}
+            className="max-w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-zinc-100 disabled:opacity-50"
+          >
+            {financialYears.map((fy) => (
+              <option key={fy.id} value={fy.id}>
+                {fy.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-2 app-window-no-drag shrink-0">
+      <div className="flex items-center gap-1 sm:gap-2 app-window-no-drag shrink-0">
         <button
+          type="button"
           onClick={onOpenPrivacy}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-xs font-mono text-zinc-300 transition-colors"
+          aria-label="Open privacy and network activity"
+          className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-white/10 sm:px-3"
         >
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span className="hidden sm:inline">Privacy</span>
         </button>
 
         <button
+          type="button"
           onClick={onOpenUpload}
-          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-semibold transition-colors shadow-sm"
+          className="rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-blue-500 sm:px-3"
         >
           + Upload
         </button>
 
         <button
+          type="button"
           onClick={onToggleChat}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors border ${
+          aria-label="Chat"
+          aria-pressed={isChatOpen}
+          className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 ${
             isChatOpen
-              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+              ? 'bg-blue-500/15 border-blue-500/30 text-blue-300'
               : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-zinc-100'
           }`}
         >
           <MessageSquare className="w-3.5 h-3.5" />
-          <span>Chat</span>
+          <span className="hidden sm:inline">Chat</span>
         </button>
       </div>
     </header>

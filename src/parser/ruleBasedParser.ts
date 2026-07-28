@@ -19,7 +19,12 @@ export class LocalRuleBasedParser implements DocumentParserProvider {
     onProgress?: ExtractProgress
   ): Promise<ParsedDocumentResult> {
     // Log local offline request to Privacy Network Activity Monitor
-    logNetworkActivity('Local Client Machine (Offline)', `Parsed ${fileName} locally`, 'offline_local', fileBuffer.byteLength);
+    logNetworkActivity(
+      'Local Client Machine (Offline)',
+      `Parsed ${fileName} locally`,
+      'offline_local',
+      fileBuffer.byteLength
+    );
 
     // Reads the PDF's text layer, or falls back to on-device OCR for scans.
     // Both run locally - no part of the document leaves the machine here.
@@ -63,21 +68,29 @@ export class LocalRuleBasedParser implements DocumentParserProvider {
         /Low income (?:tax )?offset[^\d\n]*([\d,]+(?:\.\d{2})?)/i
       ]);
 
-      // The outcome carries CR (refunded to you) or DR (payable). Without the
-      // suffix a bill and a refund are the same number.
-      const outcome = text.match(
-        /(?:Outcome|Result) of this notice\s*:?\s*\$?([\d,]+(?:\.\d{2})?)\s*(CR|DR)?/i
-      );
-      if (outcome?.[1]) {
-        const amount = parseFloat(outcome[1].replace(/,/g, ''));
-        if (!isNaN(amount)) {
-          extractedFields['assessmentResult'] = {
-            value: /dr/i.test(outcome[2] || '') ? -amount : amount,
-            confidence: 0.94,
-            sourceText: outcome[0].trim(),
-            sourcePage: 1
-          };
+      const outcomePatterns: Array<{ regex: RegExp; sign: 1 | -1 | 'suffix' }> = [
+        { regex: /\bRefund(?: amount)?\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i, sign: 1 },
+        {
+          regex: /\b(?:Amount|Balance)\s+(?:payable|due)\s*:?\s*\$?([\d,]+(?:\.\d{2})?)/i,
+          sign: -1
+        },
+        {
+          regex: /(?:Outcome|Result) of this notice\s*:?\s*\$?([\d,]+(?:\.\d{2})?)\s*(CR|DR)\b/i,
+          sign: 'suffix'
         }
+      ];
+      for (const { regex, sign } of outcomePatterns) {
+        const outcome = text.match(regex);
+        if (!outcome?.[1]) continue;
+        const amount = parseFloat(outcome[1].replace(/,/g, ''));
+        if (isNaN(amount)) continue;
+        extractedFields['assessmentResult'] = {
+          value: sign === -1 || (sign === 'suffix' && /dr/i.test(outcome[2] || '')) ? -amount : amount,
+          confidence: 0.94,
+          sourceText: outcome[0].trim(),
+          sourcePage: 1
+        };
+        break;
       }
     } else if (detectedType === 'payslip') {
       const employer = text.match(/Employer\s*:?\s*([^\n\r]+)/i);

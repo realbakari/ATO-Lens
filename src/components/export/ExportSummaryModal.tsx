@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, Download, FileSpreadsheet, FileText, Check } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Check } from 'lucide-react';
 import type { AustralianFinancialYear } from '../../types/tax';
 import { exportFinancialYearJSON, exportFinancialYearCSV } from '../../storage/db';
+import { getSuperGuaranteeRule } from '../../engine/superGuaranteeAudit';
+import { Modal } from '../common/Modal';
 
 interface ExportSummaryModalProps {
   isOpen: boolean;
@@ -17,86 +19,89 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
   selectedFy
 }) => {
   const [downloadedFormat, setDownloadedFormat] = useState<string | null>(null);
+  const sgRate = getSuperGuaranteeRule(selectedFy.id).rate;
 
-  if (!isOpen) return null;
-
-  const handleExportCSV = () => {
-    exportFinancialYearCSV(financialYears);
-    setDownloadedFormat('CSV Spreadsheet (.csv)');
-    setTimeout(() => setDownloadedFormat(null), 2500);
-  };
-
-  const handleExportJSON = () => {
-    exportFinancialYearJSON(financialYears);
-    setDownloadedFormat('Structured Backup (.json)');
+  const markDownloaded = (format: string) => {
+    setDownloadedFormat(format);
     setTimeout(() => setDownloadedFormat(null), 2500);
   };
 
   return (
-    <div className="dialog-backdrop fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="dialog-popup w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden font-mono text-xs">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/80">
-          <div className="flex items-center gap-2">
-            <Download className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-bold text-zinc-100 text-sm">Export Tax Summary for Accountant</h3>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400">
-            <X className="w-5 h-5" />
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Export tax summary for accountant"
+      subtitle={`${selectedFy.label} · ${financialYears.length} financial ${
+        financialYears.length === 1 ? 'year' : 'years'
+      } included`}
+      icon={<Download className="h-4 w-4" />}
+      size="sm"
+      footer={
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-zinc-800 px-4 py-2 font-mono text-xs font-semibold text-zinc-200 hover:bg-zinc-700"
+          >
+            Close
           </button>
         </div>
+      }
+    >
+      <div className="space-y-4 font-mono text-xs">
+        <p className="font-sans leading-relaxed text-zinc-300">
+          Download the financial history currently loaded in ATO Lens for review by a registered tax agent or accountant.
+        </p>
 
-        {/* Body */}
-        <div className="p-6 space-y-4">
-          <p className="text-zinc-300 font-sans leading-relaxed">
-            Download your parsed Australian financial history formatted specifically for registered Tax Agents and Accountants.
-          </p>
-
-          <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
-            <div className="font-bold text-zinc-200">Selected Financial Year:</div>
-            <div className="text-emerald-400 font-semibold">{selectedFy.label} ({financialYears.length} total years included)</div>
-            <div className="text-[11px] text-zinc-400 font-sans">
-              Includes gross salary, PAYG tax withheld, 12% SG super contributions, work deductions, and HELP loan indexation.
-            </div>
-          </div>
-
-          {downloadedFormat && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-400" />
-              <span>Downloaded {downloadedFormat}!</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <button
-              onClick={handleExportCSV}
-              className="p-3 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/40 text-left transition-colors space-y-1 group"
-            >
-              <FileSpreadsheet className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-              <div className="font-bold text-zinc-200">Export CSV</div>
-              <div className="text-[10px] text-zinc-500 font-sans">Excel & Sheets format</div>
-            </button>
-
-            <button
-              onClick={handleExportJSON}
-              className="p-3 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/40 text-left transition-colors space-y-1 group"
-            >
-              <FileText className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-              <div className="font-bold text-zinc-200">Export JSON</div>
-              <div className="text-[10px] text-zinc-500 font-sans">Full raw data backup</div>
-            </button>
-          </div>
-
-          <div className="pt-2 flex justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold"
-            >
-              Close
-            </button>
+        <div className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <div className="font-bold text-zinc-200">Selected financial year</div>
+          <div className="font-semibold text-emerald-400">{selectedFy.label}</div>
+          <div className="font-sans text-[11px] text-zinc-400">
+            Includes gross salary, PAYG tax withheld,{' '}
+            {sgRate === null ? 'SG' : `${sgRate.toFixed(1)}% SG`} super contributions,
+            work deductions, and HELP repayment figures.
           </div>
         </div>
+
+        {downloadedFormat && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-300"
+          >
+            <Check className="h-4 w-4 text-emerald-400" />
+            <span>Downloaded {downloadedFormat}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => {
+              exportFinancialYearCSV(financialYears);
+              markDownloaded('CSV spreadsheet');
+            }}
+            className="group space-y-1 rounded-xl border border-white/10 bg-white/[0.025] p-3 text-left transition-colors hover:border-blue-500/40 hover:bg-white/5"
+          >
+            <FileSpreadsheet className="h-5 w-5 text-blue-400 transition-transform group-hover:scale-110" />
+            <div className="font-bold text-zinc-200">Export CSV</div>
+            <div className="font-sans text-[10px] text-zinc-500">Excel and Sheets format</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              exportFinancialYearJSON(financialYears);
+              markDownloaded('JSON backup');
+            }}
+            className="group space-y-1 rounded-xl border border-white/10 bg-white/[0.025] p-3 text-left transition-colors hover:border-blue-500/40 hover:bg-white/5"
+          >
+            <FileText className="h-5 w-5 text-blue-400 transition-transform group-hover:scale-110" />
+            <div className="font-bold text-zinc-200">Export JSON</div>
+            <div className="font-sans text-[10px] text-zinc-500">Structured local backup</div>
+          </button>
+        </div>
       </div>
-    </div>
+    </Modal>
   );
 };

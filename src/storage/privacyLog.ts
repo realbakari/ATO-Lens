@@ -21,10 +21,22 @@ export function redactSensitiveData(text: string): string {
   if (!text) return text;
   let result = text;
 
-  // Redact 8 or 9-digit Australian Tax File Numbers (TFN)
+  // A labelled TFN may be eight or nine digits. Eight unlabelled digits are
+  // deliberately left alone because they are commonly amounts or references.
+  result = result.replace(
+    /\b((?:Tax File Number|TFN)\s*[:#-]?\s*)\d(?:[\s-]?\d){7,8}\b/gi,
+    '$1*** *** ***'
+  );
+
+  // Retain protection for the common formatted nine-digit TFN shape.
   result = result.replace(/\b\d{3}[\s-]?\d{3}[\s-]?\d{3}\b/g, '*** *** ***');
 
-  // Redact 10-digit Medicare Card Numbers
+  // Medicare card numbers have ten digits; the optional IRN may be labelled
+  // separately and is not needed for tax analysis.
+  result = result.replace(
+    /\b(Medicare(?: card)?(?: number| no)?\s*[:#-]?\s*)\d(?:[\s-]?\d){9}\b/gi,
+    '$1**** ***** *'
+  );
   result = result.replace(/\b\d{4}[\s-]?\d{5}[\s-]?\d{1}\b/g, '**** ***** *');
 
   // Redact BSB numbers. Only separated (123-456 / 123 456) or explicitly
@@ -33,6 +45,13 @@ export function redactSensitiveData(text: string): string {
   // the figures the parser is about to read.
   result = result.replace(/\bBSB[:\s]*\d{3}[\s-]?\d{3}\b/gi, 'BSB ***-***');
   result = result.replace(/\b\d{3}[\s-]\d{3}\b/g, '***-***');
+
+  // Account numbers vary in length, so only redact them when explicitly
+  // labelled. This avoids blanking ordinary dollar amounts and references.
+  result = result.replace(
+    /\b((?:Bank )?(?:Account|Acct)(?: number| no)?\s*[:#-]?\s*)\d(?:[\s-]?\d){5,11}\b/gi,
+    '$1********'
+  );
 
   return result;
 }
@@ -54,8 +73,8 @@ export function logNetworkActivity(
   const newLog: PrivacyNetworkLog = {
     id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     timestamp: new Date().toISOString(),
-    destination,
-    purpose,
+    destination: redactSensitiveData(destination),
+    purpose: redactSensitiveData(purpose),
     payloadRedacted,
     status,
     bytesSent

@@ -1,11 +1,19 @@
 import React from 'react';
 import type { AustralianFinancialYear } from '../../types/tax';
+import { getSuperGuaranteeRule } from '../../engine/superGuaranteeAudit';
 
 interface TaxReceiptViewProps {
   financialYear: AustralianFinancialYear;
 }
 
 export const TaxReceiptView: React.FC<TaxReceiptViewProps> = ({ financialYear }) => {
+  const sgRate = getSuperGuaranteeRule(financialYear.id).rate;
+  const assessmentLabel =
+    financialYear.assessmentResult > 0
+      ? `+$${financialYear.assessmentResult.toLocaleString()} REFUND`
+      : financialYear.assessmentResult < 0
+        ? `-$${Math.abs(financialYear.assessmentResult).toLocaleString()} PAYABLE`
+        : '$0 NO BALANCE';
   return (
     <div className="max-w-md mx-auto my-6 bg-zinc-100 text-zinc-900 rounded-lg p-6 shadow-2xl font-mono text-xs border border-zinc-300 relative overflow-hidden">
       {/* Decorative serrated receipt top border */}
@@ -51,7 +59,7 @@ export const TaxReceiptView: React.FC<TaxReceiptViewProps> = ({ financialYear })
           <span>-${financialYear.helpRepayment.toLocaleString()}</span>
         </div>
         <div className="flex justify-between text-zinc-700 font-medium">
-          <span>EMPLOYER SUPER (12% SG)</span>
+          <span>EMPLOYER SUPER ({sgRate === null ? 'SG' : `${sgRate.toFixed(1)}% SG`})</span>
           <span>${financialYear.employerSuper.toLocaleString()}</span>
         </div>
       </div>
@@ -59,10 +67,16 @@ export const TaxReceiptView: React.FC<TaxReceiptViewProps> = ({ financialYear })
       {/* Assessment Outcome */}
       <div className="p-3 rounded bg-zinc-200 border border-zinc-400 mb-4 flex justify-between items-center text-sm font-bold">
         <span>ASSESSMENT RESULT:</span>
-        <span className={financialYear.assessmentResult >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-          {financialYear.assessmentResult >= 0
-            ? `+$${financialYear.assessmentResult.toLocaleString()} REFUND`
-            : `-$${Math.abs(financialYear.assessmentResult).toLocaleString()} PAYABLE`}
+        <span
+          className={
+            financialYear.assessmentResult > 0
+              ? 'text-emerald-700'
+              : financialYear.assessmentResult < 0
+                ? 'text-rose-700'
+                : 'text-zinc-700'
+          }
+        >
+          {assessmentLabel}
         </span>
       </div>
 
@@ -72,7 +86,7 @@ export const TaxReceiptView: React.FC<TaxReceiptViewProps> = ({ financialYear })
           ||||| | |||| ||| |||||| | ||||| || ||||
         </div>
         <div className="text-[9px] text-zinc-500 font-mono">
-          NOA REF: {financialYear.assessment?.noticeReference.value || 'ATO-REF-884920'} • LOCAL VERIFIED
+          NOA REF: {financialYear.assessment?.noticeReference.value || 'NOT RECORDED'} • LOCAL WORKSPACE
         </div>
       </div>
     </div>

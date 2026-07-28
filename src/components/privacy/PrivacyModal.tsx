@@ -43,12 +43,13 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
   const yearCount = financialYears.length;
 
   const facts = [
-    'No account, no server, no cloud database - documents and extracted values stay in this browser profile.',
-    'Tax file numbers, Medicare numbers and BSBs are redacted before anything is logged or sent to an AI provider.',
+    'There is no ATO Lens account, server, cloud database, telemetry, or analytics service. Extracted workspace data is stored in this browser profile.',
+    'Tax file numbers, Medicare numbers, BSBs and labelled bank accounts are redacted at the outbound AI chat boundary and before activity descriptions are logged.',
     configuredProviders.length === 0
-      ? 'No AI provider keys configured, so parsing runs entirely offline.'
-      : `API keys are held in this browser's local storage as plain text (${configuredProviders.length} configured) and are sent only to that provider's own API.`,
-    'Choosing an AI parser uploads the original PDF to that provider - the file itself cannot be redacted first.',
+      ? 'No AI provider keys are configured, so document parsing and chat use the offline paths.'
+      : `API keys are held as plain text in this browser profile (${configuredProviders.length} configured) and used only in direct requests to the selected provider.`,
+    'Choosing Claude, OpenAI, or Gemini document parsing uploads the original selected PDF directly to that provider. The activity log marks this as a raw file.',
+    'AI chat sends a redacted copy of the system context, every prior turn, and the current message directly to the selected provider.',
     ...(isElectron()
       ? [
           'The desktop app asks GitHub for the latest release version on startup. That is its only unprompted network request, it sends no tax data, and it can be turned off under Help → Check for Updates Automatically.'

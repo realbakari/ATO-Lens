@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Send, Bot, RefreshCw, FileText } from 'lucide-react';
 import type { AustralianFinancialYear, ExtractedValue } from '../../types/tax';
-import { redactSensitiveData, logNetworkActivity } from '../../storage/privacyLog';
+import { redactSensitiveData } from '../../storage/privacyLog';
 import { getActiveAiProvider, getProviderDisplayName, sendChatMessage, type ChatTurn } from '../../lib/aiChatClient';
 import type { AiProviderId } from '../../lib/apiKeys';
+import {
+  buildTaxContextSystemPrompt,
+  generateLocalResponse,
+  type LocalChatCitation
+} from '../../lib/localChatResponses';
 
 interface LocalChatDrawerProps {
   isOpen: boolean;
@@ -17,11 +22,7 @@ interface Message {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
-  citations?: Array<{
-    documentName: string;
-    page: number;
-    fieldName: string;
-  }>;
+  citations?: LocalChatCitation[];
 }
 
 const WIDTH_STORAGE_KEY = 'tax-chat-width';
@@ -65,6 +66,7 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -72,6 +74,68 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen || !isMobile) return;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const drawer = drawerRef.current;
+    const parent = drawer?.parentElement;
+    const siblingStates = parent
+      ? Array.from(parent.children)
+          .filter((element) => element !== drawer)
+          .map((element) => ({
+            element: element as HTMLElement,
+            inert: (element as HTMLElement).inert,
+            ariaHidden: element.getAttribute('aria-hidden')
+          }))
+      : [];
+    const previousBodyOverflow = document.body.style.overflow;
+
+    for (const state of siblingStates) {
+      state.element.inert = true;
+      state.element.setAttribute('aria-hidden', 'true');
+    }
+    document.body.style.overflow = 'hidden';
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Tab' || !drawer) return;
+
+      const focusable = Array.from(
+        drawer.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((element) => !element.hasAttribute('hidden'));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      for (const state of siblingStates) {
+        state.element.inert = state.inert;
+        if (state.ariaHidden === null) state.element.removeAttribute('aria-hidden');
+        else state.element.setAttribute('aria-hidden', state.ariaHidden);
+      }
+      document.body.style.overflow = previousBodyOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [isMobile, isOpen, onClose]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -102,28 +166,24 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
 
   // Initial welcome message
   useEffect(() => {
-    if (messages.length === 0 && financialYears.length > 0) {
-      const latestFy = financialYears[0];
+    if (messages.length === 0 && isOpen) {
       const providerNote = activeProvider
         ? `I'm connected to **${assistantName}** for richer reasoning about your history.`
         : `I'm running fully offline (no AI key configured) - add one in API Key Setup for richer reasoning.`;
+      const hasData = financialYears.length > 0;
       setMessages([
         {
           id: 'welcome-1',
           sender: 'assistant',
-          text: `G'day! I'm your Australian tax assistant. I have loaded **${financialYears.length} financial years** (${financialYears.map((f) => f.label).join(', ')}). ${providerNote}\n\nAsk me anything about your Notice of Assessment refund, 12% Super Guarantee compliance, work deduction claims, or HELP indexation.`,
+          text: hasData
+            ? `G'day! I'm your Australian tax assistant. I have loaded **${financialYears.length} financial years** (${financialYears.map((f) => f.label).join(', ')}). ${providerNote}\n\nAsk me about your assessment, Super Guarantee records, work deductions, or HELP repayment.`
+            : `G'day! No financial-year data is loaded yet. Upload a document or add figures to start. ${providerNote}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          citations: [
-            {
-              documentName: latestFy.documents[0]?.fileName || 'ATO-Individual-Tax-Return-2025-26.pdf',
-              page: 1,
-              fieldName: 'Gross Income'
-            }
-          ]
+          citations: []
         }
       ]);
     }
-  }, [financialYears, activeProvider, assistantName]);
+  }, [financialYears, activeProvider, assistantName, isOpen, messages.length]);
 
   // Scroll to bottom & Auto-grow Textarea
   useEffect(() => {
@@ -168,21 +228,11 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
     void (async () => {
       if (activeProvider) {
         try {
-          logNetworkActivity(
-            activeProvider === 'claude'
-              ? 'api.anthropic.com'
-              : activeProvider === 'openai'
-              ? 'api.openai.com'
-              : 'generativelanguage.googleapis.com',
-            'Chat message about local tax history (redacted)',
-            'allowed',
-            query.length
-          );
           const responseText = await sendChatMessage(
             activeProvider,
             buildTaxContextSystemPrompt(financialYears),
             history,
-            redactSensitiveData(query)
+            query
           );
           setMessages((prev) => [
             ...prev,
@@ -203,7 +253,16 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
       // Offline fallback (also used when no provider is configured, or the API call failed)
       await new Promise((resolve) => setTimeout(resolve, 500));
       const reply = generateLocalResponse(query, financialYears);
-      setMessages((prev) => [...prev, reply]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `reply-${Date.now()}`,
+          sender: 'assistant',
+          text: reply.text,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          citations: reply.citations
+        }
+      ]);
       setIsTyping(false);
     })();
   };
@@ -217,6 +276,10 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
 
   return (
     <div
+      ref={drawerRef}
+      role={isMobile ? 'dialog' : 'complementary'}
+      aria-modal={isMobile ? true : undefined}
+      aria-label="Tax assistant chat"
       className={`drawer-slide-in relative flex h-full flex-col border-l border-zinc-800 bg-[#0a0a0a] shrink-0 ${
         isMobile ? 'fixed inset-0 z-40' : ''
       }`}
@@ -225,6 +288,7 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
       {/* Tax UI Draggable Resize Handle on Left Edge */}
       <div
         onMouseDown={handleMouseDown}
+        aria-hidden="true"
         className="absolute top-0 bottom-0 left-0 hidden w-1 cursor-col-resize hover:bg-zinc-700 md:block z-10"
         title="Drag to resize chat width"
       />
@@ -235,6 +299,7 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
         <div className="flex items-center gap-1">
           {messages.length > 0 && (
             <button
+              type="button"
               onClick={handleNewChat}
               className="px-2.5 py-1 text-xs font-medium rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors flex items-center gap-1"
             >
@@ -243,7 +308,9 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
             </button>
           )}
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close chat"
             className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -282,21 +349,14 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
                     {msg.citations.map((cit, idx) => (
                       <button
                         key={idx}
-                        onClick={() =>
-                          onOpenProvenance(cit.fieldName, {
-                            value: 'Cited Record',
-                            confidence: 0.98,
-                            sourceDocumentId: 'doc-cited-01',
-                            sourceDocumentName: cit.documentName,
-                            sourcePage: cit.page,
-                            sourceText: `${cit.fieldName} cited in Australian FY response`,
-                            manuallyConfirmed: true
-                          })
-                        }
+                        type="button"
+                        onClick={() => onOpenProvenance(cit.fieldName, cit.value)}
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-mono text-[10px] border border-emerald-500/30 transition-colors"
                       >
                         <FileText className="w-3 h-3 text-emerald-400" />
-                        <span>[{cit.documentName}, p.{cit.page}]</span>
+                        <span>
+                          [{cit.documentName}{cit.page ? `, p.${cit.page}` : ''}]
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -330,7 +390,7 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
         >
           <div className="w-full text-xs text-zinc-500 font-mono mb-1">Suggested follow-ups</div>
           {[
-            'Did my employer pay 12% super compliance?',
+            'Do my records show Super Guarantee compliance?',
             'What is my effective tax rate for 2025-26?',
             'Explain my Notice of Assessment refund'
           ].map((prompt, idx) => (
@@ -366,11 +426,13 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
               }
             }}
             placeholder="Ask anything..."
+            aria-label="Ask the tax assistant"
             rows={3}
             className="w-full resize-none overflow-y-auto rounded-lg bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none disabled:opacity-50 border border-zinc-800/80 focus:border-zinc-700"
           />
           <button
             type="submit"
+            aria-label="Send message"
             disabled={!input.trim() || isTyping}
             className="absolute right-2.5 bottom-2.5 p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white transition-all"
           >
@@ -381,44 +443,3 @@ export const LocalChatDrawer: React.FC<LocalChatDrawerProps> = ({
     </div>
   );
 };
-
-function buildTaxContextSystemPrompt(financialYears: AustralianFinancialYear[]): string {
-  const summary = financialYears
-    .map(
-      (fy) =>
-        `${fy.label}: gross income $${fy.grossIncome.toLocaleString()}, taxable income $${fy.taxableIncome.toLocaleString()}, tax withheld $${fy.taxWithheld.toLocaleString()}, deductions $${fy.totalDeductions.toLocaleString()}, employer super $${fy.employerSuper.toLocaleString()}, Medicare levy $${fy.medicareLevy.toLocaleString()}, HELP repayment $${fy.helpRepayment.toLocaleString()}, assessment result ${fy.assessmentResult >= 0 ? '+' : ''}$${fy.assessmentResult.toLocaleString()}.`
-    )
-    .join('\n');
-
-  return `You are the built-in Australian tax assistant inside ATO Lens, a local-first tax workspace. Answer questions about the user's own Australian tax history using ONLY the redacted figures below. Be concise, cite dollar amounts, and reference relevant ATO concepts (Notice of Assessment, Superannuation Guarantee, Medicare levy, HELP/HECS, work-related deductions) where useful. Never ask for or repeat a Tax File Number, Medicare number, or bank details.\n\nLocal financial year summary (already redacted of sensitive identifiers):\n${summary}`;
-}
-
-function generateLocalResponse(query: string, financialYears: AustralianFinancialYear[]): Message {
-  const q = query.toLowerCase();
-  const latestFy = financialYears[0] || { label: '2025–26', grossIncome: 96420, taxWithheld: 24167, employerSuper: 11246, totalDeductions: 6750, assessmentResult: 1284 };
-
-  let replyText = '';
-  let citations: Message['citations'] = [];
-
-  if (q.includes('super')) {
-    replyText = `Based on your **${latestFy.label}** tax records, your employer recorded **$${latestFy.employerSuper.toLocaleString()}** in superannuation contributions. This meets the mandatory **12.0% Superannuation Guarantee (SG)** compliance rate for Australia.`;
-    citations = [{ documentName: 'STP-Income-Statement-2025-26.pdf', page: 1, fieldName: 'Employer Super' }];
-  } else if (q.includes('rate') || q.includes('tax rate')) {
-    replyText = `For financial year **${latestFy.label}**, your gross income was **$${latestFy.grossIncome.toLocaleString()}** and total PAYG tax withheld was **$${latestFy.taxWithheld.toLocaleString()}**. Your effective tax rate was **${((latestFy.taxWithheld / latestFy.grossIncome) * 100).toFixed(1)}%**.`;
-    citations = [{ documentName: 'ATO-Notice-of-Assessment-2025-26.pdf', page: 1, fieldName: 'Taxable Income' }];
-  } else if (q.includes('refund') || q.includes('assessment')) {
-    replyText = `Your Notice of Assessment for **${latestFy.label}** calculates an assessment result of **+$${latestFy.assessmentResult.toLocaleString()} refund** credited back to your nominated bank account.`;
-    citations = [{ documentName: 'ATO-Notice-of-Assessment-2025-26.pdf', page: 1, fieldName: 'Assessment Result' }];
-  } else {
-    replyText = `I searched your local Australian tax history across **${financialYears.length} financial years**. In **${latestFy.label}**, you earned $${latestFy.grossIncome.toLocaleString()} gross with $${latestFy.totalDeductions.toLocaleString()} in work deductions claimed.`;
-    citations = [{ documentName: 'ATO-Individual-Tax-Return-2025-26.pdf', page: 1, fieldName: 'Gross Salary' }];
-  }
-
-  return {
-    id: `reply-${Date.now()}`,
-    sender: 'assistant',
-    text: replyText,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    citations
-  };
-}

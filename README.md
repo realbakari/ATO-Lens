@@ -2,6 +2,8 @@
 
 ATO Lens helps you visualise and understand your Australian tax history in a local-first workspace. Chat with your tax returns, income statements, and super contributions to find insights or catch mistakes.
 
+![ATO Lens financial year dashboard](docs/assets/ato-lens-app.png)
+
 ## Download
 
 Desktop builds are published on the [Releases page](https://github.com/realbakari/ATO-Lens/releases).
@@ -82,9 +84,9 @@ ATO Lens works fully offline with a built-in rule-based parser. Optionally add y
 
 ### How Your Data is Processed
 
-Your tax data is processed locally in your browser (or the desktop app) and stored only in local storage - never sent to any ATO Lens server, because there isn't one.
+Your tax data is processed locally in your browser (or the desktop app) and the workspace is stored in local storage. There is no ATO Lens account, server, cloud database, telemetry, or analytics service.
 
-If you add an API key, documents and chat messages are sent directly from your device to that provider's API using your own key. No data passes through a third-party server.
+The default rule-based parser and OCR stay on your device. If you deliberately choose Claude, OpenAI, or Gemini document parsing, the original selected PDF is sent directly from your device to that provider using your key. AI chat sends a redacted copy of the system context, prior turns, and current message to the selected provider. Ollama uses the local or self-hosted endpoint you configure. None of these requests passes through an ATO Lens intermediary.
 
 ### Verify It Yourself
 
@@ -98,34 +100,33 @@ I want you to perform a security and privacy audit of ATO Lens, an open source A
 
 Repository: https://github.com/realbakari/ATO-Lens
 
-Please analyze the source code and verify:
+Please analyze the source code and report what it actually does:
 
 1. DATA HANDLING
    - Tax documents are parsed locally by default (src/parser/ruleBasedParser.ts)
-   - If an API key is configured, documents/chat messages are sent directly to that
-     provider's API only (src/parser/claudeParser.ts, openaiParser.ts, geminiParser.ts,
+   - Trace optional document uploads and redacted chat requests
+     (src/parser/claudeParser.ts, openaiParser.ts, geminiParser.ts,
      src/lib/aiChatClient.ts)
-   - No data is sent to any other third-party server
-   - Parsed data is stored locally only (src/storage/db.ts)
+   - Identify exactly what is stored locally (src/storage/db.ts)
 
 2. NETWORK ACTIVITY
    - Identify all network requests in the codebase
-   - Verify the only external calls are to the AI provider you configured (if any)
-   - Check for any hidden data collection or tracking
+   - Inspect GitHub updater and configured AI-provider calls
+   - Check for any hidden data collection, font requests, or tracking
 
 3. API KEY SECURITY
-   - Verify API keys are stored locally (src/lib/apiKeys.ts) and not transmitted elsewhere
+   - Inspect how API keys are stored and sent (src/lib/apiKeys.ts)
    - Check that keys are not logged or exposed
 
 4. REDACTION
-   - Verify Tax File Numbers, Medicare numbers, and BSBs are redacted before being
-     logged or sent to an AI provider (src/storage/privacyLog.ts)
+   - Test chat system context, prior turns, current messages, and activity descriptions
+   - Confirm original PDF uploads are disclosed as raw (src/storage/privacyLog.ts)
 
 5. CODE INTEGRITY
    - Look for obfuscated or suspicious code
    - Review dependencies for anything concerning
 
-Report any privacy or security concerns. I'm considering using this app with sensitive tax data.
+Report privacy/security concerns and uncertainty; do not assume these claims are correct.
 ```
 
 </details>

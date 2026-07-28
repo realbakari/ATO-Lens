@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GitCompare, Sparkles } from 'lucide-react';
 import type { AustralianFinancialYear } from '../../types/tax';
 import { YearChangeCard } from '../common/InsightCards';
+import { describeObservedChange } from '../../lib/compareYears';
 
 interface CompareYearsSectionProps {
   financialYears: AustralianFinancialYear[];
@@ -34,22 +35,23 @@ export const CompareYearsSection: React.FC<CompareYearsSectionProps> = ({ financ
     };
   };
 
-  const rows = [
-    { label: 'Gross income', valA: fyA.grossIncome, valB: fyB.grossIncome },
-    { label: 'Taxable income', valA: fyA.taxableIncome, valB: fyB.taxableIncome },
-    { label: 'Deductions', valA: fyA.totalDeductions, valB: fyB.totalDeductions },
-    { label: 'Tax withheld', valA: fyA.taxWithheld, valB: fyB.taxWithheld },
-    { label: 'HELP repayment', valA: fyA.helpRepayment, valB: fyB.helpRepayment },
-    { label: 'Refund / Assessment', valA: fyA.assessmentResult, valB: fyB.assessmentResult },
-    { label: 'Employer super', valA: fyA.employerSuper, valB: fyB.employerSuper }
+  const rows: Array<{
+    label: string;
+    valA: number;
+    valB: number;
+    direction: 'positive' | 'negative' | 'neutral';
+  }> = [
+    { label: 'Gross income', valA: fyA.grossIncome, valB: fyB.grossIncome, direction: 'positive' },
+    { label: 'Taxable income', valA: fyA.taxableIncome, valB: fyB.taxableIncome, direction: 'neutral' },
+    { label: 'Deductions', valA: fyA.totalDeductions, valB: fyB.totalDeductions, direction: 'neutral' },
+    { label: 'Tax withheld', valA: fyA.taxWithheld, valB: fyB.taxWithheld, direction: 'neutral' },
+    { label: 'HELP repayment', valA: fyA.helpRepayment, valB: fyB.helpRepayment, direction: 'negative' },
+    { label: 'Assessment result', valA: fyA.assessmentResult, valB: fyB.assessmentResult, direction: 'positive' },
+    { label: 'Employer super', valA: fyA.employerSuper, valB: fyB.employerSuper, direction: 'positive' }
   ];
 
   // fyA is the earlier year in the selectors; the card reads newest-first.
   const orderedForChange = fyA.id <= fyB.id ? [fyB, fyA] : [fyA, fyB];
-
-  const grossDiff = calcChange(fyA.grossIncome, fyB.grossIncome);
-  const refundDiff = calcChange(fyA.assessmentResult, fyB.assessmentResult);
-  const helpDiff = calcChange(fyA.helpRepayment, fyB.helpRepayment);
 
   return (
     <div className="space-y-6">
@@ -69,6 +71,7 @@ export const CompareYearsSection: React.FC<CompareYearsSectionProps> = ({ financ
 
         <div className="flex items-center gap-3 bg-zinc-900/90 border border-zinc-800 p-2 rounded-xl">
           <select
+            aria-label="Earlier financial year"
             value={fyIdA}
             onChange={(e) => setFyIdA(e.target.value)}
             className="bg-zinc-950 text-zinc-100 text-xs font-mono font-bold py-1.5 px-3 rounded border border-zinc-800 focus:outline-none"
@@ -81,6 +84,7 @@ export const CompareYearsSection: React.FC<CompareYearsSectionProps> = ({ financ
           </select>
           <span className="text-xs font-bold text-zinc-500 font-mono">VS</span>
           <select
+            aria-label="Later financial year"
             value={fyIdB}
             onChange={(e) => setFyIdB(e.target.value)}
             className="bg-zinc-950 text-zinc-100 text-xs font-mono font-bold py-1.5 px-3 rounded border border-zinc-800 focus:outline-none"
@@ -109,6 +113,12 @@ export const CompareYearsSection: React.FC<CompareYearsSectionProps> = ({ financ
             <tbody className="divide-y divide-zinc-800/60">
               {rows.map((r, idx) => {
                 const change = calcChange(r.valA, r.valB);
+                const positiveDirection =
+                  r.direction === 'neutral'
+                    ? null
+                    : r.direction === 'positive'
+                      ? change.diff >= 0
+                      : change.diff <= 0;
                 return (
                   <tr key={idx} className="hover:bg-zinc-900/50">
                     <td className="p-4 font-semibold text-zinc-200">{r.label}</td>
@@ -117,9 +127,11 @@ export const CompareYearsSection: React.FC<CompareYearsSectionProps> = ({ financ
                     <td className="p-4 text-right">
                       <span
                         className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded text-xs ${
-                          change.isPositive
+                          positiveDirection === true
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            : positiveDirection === false
+                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
                         }`}
                       >
                         {change.pct}
@@ -146,18 +158,10 @@ export const CompareYearsSection: React.FC<CompareYearsSectionProps> = ({ financ
             Comparing <strong>{fyA.label}</strong> to <strong>{fyB.label}</strong>:
           </p>
           <ul className="list-disc list-inside space-y-1 pl-2 text-zinc-300">
-            <li>
-              <strong>Gross Income:</strong> Increased by <strong className="text-emerald-400">{grossDiff.pct}</strong> (+${Math.abs(grossDiff.diff).toLocaleString()}), driven by salary growth and tech allowances.
-            </li>
-            <li>
-              <strong>Deductions:</strong> Claimed work deductions grew by <strong className="text-emerald-400">{calcChange(fyA.totalDeductions, fyB.totalDeductions).pct}</strong> (+${Math.abs(fyB.totalDeductions - fyA.totalDeductions).toLocaleString()}) with new laptop and self-education items.
-            </li>
-            <li>
-              <strong>Assessment Result:</strong> Your tax refund shifted by <strong className="text-rose-400">{refundDiff.pct}</strong> (from +${fyA.assessmentResult.toLocaleString()} down to +${fyB.assessmentResult.toLocaleString()}).
-            </li>
-            <li>
-              <strong>Primary Cause:</strong> As gross income crossed into higher HELP threshold rates ($96,420), compulsory study loan repayments increased by <strong className="text-rose-400">{helpDiff.pct}</strong> (+${Math.abs(helpDiff.diff).toLocaleString()}), which offset a portion of your PAYG withholding refund.
-            </li>
+            <li>{describeObservedChange('Gross income', fyA.grossIncome, fyB.grossIncome)}</li>
+            <li>{describeObservedChange('Recorded deductions', fyA.totalDeductions, fyB.totalDeductions)}</li>
+            <li>{describeObservedChange('Assessment result', fyA.assessmentResult, fyB.assessmentResult)}</li>
+            <li>{describeObservedChange('HELP repayment', fyA.helpRepayment, fyB.helpRepayment)}</li>
           </ul>
         </div>
       </div>

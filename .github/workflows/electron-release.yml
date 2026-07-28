@@ -11,10 +11,29 @@ on:
         required: false
 
 jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate release version
+        id: version
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.version }}
+        run: node scripts/check-release-version.mjs
+
   build-mac:
     # Both architectures build in one job on purpose: electron-builder writes a
     # single latest-mac.yml per invocation, so splitting them across jobs would
     # produce two manifests that overwrite each other in the release.
+    needs: verify-version
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +102,18 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --mac --arm64 --x64 --config electron-builder.yml --publish never
 
+      - name: Verify packaged application version
+        env:
+          EXPECTED_VERSION: ${{ needs.verify-version.outputs.version }}
+        run: |
+          for APP in release/mac*/*.app; do
+            ACTUAL_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
+            if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+              echo "::error::Packaged version $ACTUAL_VERSION does not match $EXPECTED_VERSION"
+              exit 1
+            fi
+          done
+
       - name: Verify signature and notarization
         if: steps.creds.outputs.signed == 'true'
         run: |
@@ -105,6 +136,7 @@ jobs:
           if-no-files-found: error
 
   build-windows:
+    needs: verify-version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -137,6 +169,7 @@ jobs:
           if-no-files-found: error
 
   build-linux:
+    needs: verify-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -166,7 +199,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [build-mac, build-windows, build-linux]
+    needs: [verify-version, build-mac, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -177,15 +210,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Get release version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          fi
 
       # The Windows installer is unsigned, so publishing checksums is the only
       # way for someone to confirm the file they downloaded is the file built here.
@@ -199,7 +223,8 @@ jobs:
       - name: Publish GitHub desktop release
         uses: softprops/action-gh-release@v2
         with:
-          name: ATO Lens v${{ steps.version.outputs.version }}
+          name: ATO Lens v${{ needs.verify-version.outputs.version }}
+          tag_name: v${{ needs.verify-version.outputs.version }}
           draft: true
           files: |
             artifacts/**/*.dmg

@@ -1,9 +1,50 @@
-import type { AustralianFinancialYear } from '../types/tax';
+import type {
+  AustralianFinancialYear,
+  EditableFigure,
+  FigureOrigin
+} from '../types/tax';
 import { clearAllApiKeys } from '../lib/apiKeys';
 import { clearAllNetworkLogs } from './privacyLog';
 
 const REAL_DATA_KEY = 'ato_lens_financial_years_v1';
 const SHOW_SAMPLE_KEY = 'ato_lens_show_sample_data';
+const FIGURE_KEYS: EditableFigure[] = [
+  'grossIncome',
+  'taxableIncome',
+  'taxWithheld',
+  'totalDeductions',
+  'medicareLevy',
+  'helpRepayment',
+  'assessmentResult',
+  'employerSuper'
+];
+
+export function normaliseFinancialYear(fy: AustralianFinancialYear): AustralianFinancialYear {
+  const origins: Partial<Record<EditableFigure, FigureOrigin>> = {
+    ...(fy.figureOrigins ?? {})
+  };
+
+  for (const figure of FIGURE_KEYS) {
+    if (fy.manualOverrides?.[figure]) {
+      origins[figure] = 'manual';
+    } else if (!origins[figure] && Number.isFinite(fy[figure]) && fy[figure] !== 0) {
+      // Legacy non-zero values are preserved as authoritative. Older records
+      // did not retain enough metadata to distinguish document values safely.
+      origins[figure] = 'document';
+    }
+  }
+
+  return {
+    ...fy,
+    figureOrigins: origins,
+    income: fy.income ?? [],
+    deductions: fy.deductions ?? [],
+    superContributions: fy.superContributions ?? [],
+    payslips: fy.payslips ?? [],
+    documents: fy.documents ?? [],
+    alerts: fy.alerts ?? []
+  };
+}
 
 /**
  * Real, user-uploaded financial year data. This is kept entirely separate
@@ -13,7 +54,13 @@ const SHOW_SAMPLE_KEY = 'ato_lens_show_sample_data';
 export function loadRealFinancialYears(): AustralianFinancialYear[] {
   try {
     const raw = localStorage.getItem(REAL_DATA_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const normalised = parsed.map((fy) => normaliseFinancialYear(fy as AustralianFinancialYear));
+    const migrated = JSON.stringify(normalised);
+    if (migrated !== raw) localStorage.setItem(REAL_DATA_KEY, migrated);
+    return normalised;
   } catch (err) {
     console.error('Failed to load local tax data from localStorage:', err);
     return [];

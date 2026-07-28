@@ -64,13 +64,13 @@ export const ThresholdCard: React.FC<{ currentFy: AustralianFinancialYear }> = (
   return (
     <div className="glass-panel p-5">
       <div className="mb-3 flex items-center gap-2">
-        <Gauge className="h-4 w-4 text-emerald-400" />
-        <h3 className="font-mono text-sm font-semibold text-zinc-200">Thresholds within reach</h3>
+        <Gauge className="h-4 w-4 text-blue-400" />
+        <h3 className="text-sm font-semibold text-zinc-200">Thresholds within reach</h3>
       </div>
 
       <div className="space-y-2.5">
         {nearby.map((threshold) => (
-          <div key={threshold.label} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+          <div key={threshold.label} className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2.5">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <span className="text-xs font-semibold text-zinc-200">{threshold.label}</span>
               <span className="font-mono text-[11px] text-zinc-400">

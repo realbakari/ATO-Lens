@@ -81,7 +81,12 @@ function TotalRow({
 }
 
 export function ReceiptView({ data }: Props) {
-  const isRefund = data.assessmentResult > 0;
+  const assessmentLabel =
+    data.assessmentResult > 0
+      ? 'Assessment Refund'
+      : data.assessmentResult < 0
+        ? 'Amount Payable'
+        : 'Assessment Balance';
   
   return (
     <div className="px-4 py-4 md:px-0 md:py-8 md:pb-12">
@@ -114,7 +119,7 @@ export function ReceiptView({ data }: Props) {
               )}
               
               <TotalRow
-                label={isRefund ? "Assessment Refund" : "Amount Payable"}
+                label={assessmentLabel}
                 amount={data.assessmentResult}
                 showSign
                 highlight

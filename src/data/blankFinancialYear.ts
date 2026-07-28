@@ -22,6 +22,7 @@ export function createBlankFinancialYear(
     employerSuper: 0,
     employerCount: 0,
     effectiveTaxRate: 0,
+    figureOrigins: {},
     income: [],
     deductions: [],
     superContributions: [],

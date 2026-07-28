@@ -48,41 +48,45 @@ export const HELPSection: React.FC<HELPSectionProps> = ({ currentFy, onOpenProve
       {/* Main Loan Metrics Grid */}
       <div className="glass-panel p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
-          <div
+          <button
+            type="button"
             onClick={() => onOpenProvenance('Opening HELP Balance', loan.openingBalance)}
-            className="glass-card p-4 cursor-pointer hover:border-emerald-500/40 space-y-1"
+            className="glass-card w-full space-y-1 p-4 text-left hover:border-emerald-500/40"
           >
             <div className="text-xs text-zinc-400">Opening Balance</div>
             <div className="text-2xl font-bold text-zinc-100">${loan.openingBalance.value.toLocaleString()}</div>
             <div className="text-[11px] text-zinc-400">As at 1 July {currentFy.startDate.split('-')[0]}</div>
-          </div>
+          </button>
 
-          <div
+          <button
+            type="button"
             onClick={() => onOpenProvenance('HELP Indexation Amount', loan.indexationAmount)}
-            className="glass-card p-4 cursor-pointer hover:border-emerald-500/40 space-y-1"
+            className="glass-card w-full space-y-1 p-4 text-left hover:border-emerald-500/40"
           >
             <div className="text-xs text-zinc-400">Indexation Applied</div>
             <div className="text-2xl font-bold text-amber-400">+${loan.indexationAmount.value.toLocaleString()}</div>
             <div className="text-[11px] text-zinc-400">{(loan.indexationRate * 100).toFixed(1)}% annual rate</div>
-          </div>
+          </button>
 
-          <div
+          <button
+            type="button"
             onClick={() => onOpenProvenance('Compulsory HELP Repayment', loan.compulsoryRepayment)}
-            className="glass-card p-4 cursor-pointer hover:border-emerald-500/40 space-y-1"
+            className="glass-card w-full space-y-1 p-4 text-left hover:border-emerald-500/40"
           >
             <div className="text-xs text-zinc-400">Compulsory Repayment</div>
             <div className="text-2xl font-bold text-emerald-400">-${loan.compulsoryRepayment.value.toLocaleString()}</div>
             <div className="text-[11px] text-zinc-400">ATO Assessment {currentFy.label}</div>
-          </div>
+          </button>
 
-          <div
+          <button
+            type="button"
             onClick={() => onOpenProvenance('Closing HELP Balance', loan.closingBalance)}
-            className="glass-card p-4 cursor-pointer hover:border-emerald-500/40 space-y-1"
+            className="glass-card w-full space-y-1 p-4 text-left hover:border-emerald-500/40"
           >
             <div className="text-xs text-zinc-400">Closing Debt Balance</div>
             <div className="text-2xl font-bold text-zinc-100">${loan.closingBalance.value.toLocaleString()}</div>
             <div className="text-[11px] text-zinc-400">Est. payoff: {loan.estimatedPayoffYears} yrs</div>
-          </div>
+          </button>
         </div>
       </div>
 

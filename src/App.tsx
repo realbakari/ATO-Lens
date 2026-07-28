@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useId, useMemo } from 'react';
+import { MotionConfig, motion } from 'motion/react';
 import type { AustralianFinancialYear, ExtractedValue, SourceDocument } from './types/tax';
 import {
   loadRealFinancialYears,
@@ -29,7 +30,6 @@ import { PrivacyModal } from './components/privacy/PrivacyModal';
 import { FAQSection } from './components/faq/FAQSection';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { DevTools } from './components/common/DevTools';
-import { BrailleSpinner } from './components/common/BrailleSpinner';
 import { EmptyWorkspaceState } from './components/common/EmptyWorkspaceState';
 import { FileText, ShieldCheck, EyeOff } from 'lucide-react';
 
@@ -44,26 +44,10 @@ const PARSER_ENGINE_LABELS: Record<string, string> = {
 };
 
 export function App() {
+  const subnavHighlightId = useId();
+
   useEffect(() => {
     applyElectronDocumentAttributes();
-  }, []);
-
-  // Waits for webfonts before revealing the workspace, avoiding a flash of
-  // system-font text. Handed off from the static loader in index.html.
-  const [isBooting, setIsBooting] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    const fontsReady = (document as any).fonts?.ready ?? Promise.resolve();
-    const minimumSplash = new Promise((resolve) => setTimeout(resolve, 350));
-    Promise.race([Promise.all([fontsReady, minimumSplash]), new Promise((resolve) => setTimeout(resolve, 1200))]).then(
-      () => {
-        if (!cancelled) setIsBooting(false);
-      }
-    );
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   // Real, user-uploaded data and the bundled sample/demo data are kept
@@ -111,17 +95,7 @@ export function App() {
 
   const handleOpenProvenance = (fieldName: string, value?: ExtractedValue<any>) => {
     if (!currentFy) return;
-    if (!value) {
-      value = {
-        value: 'Verified Tax Record',
-        confidence: 0.98,
-        sourceDocumentId: currentFy.documents[0]?.id || 'doc-tax-return-2026',
-        sourceDocumentName: currentFy.documents[0]?.fileName || 'ATO-Individual-Tax-Return-2025-26.pdf',
-        sourcePage: 1,
-        sourceText: `${fieldName} extracted for Australian FY ${currentFy.label}`,
-        manuallyConfirmed: true
-      };
-    }
+    if (!value) return;
     setProvenanceField(fieldName);
     setProvenanceValue(value);
     setIsProvenanceOpen(true);
@@ -185,19 +159,10 @@ export function App() {
     setSampleDataVisible(true);
   };
 
-  if (isBooting) {
-    return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center gap-3.5 bg-black text-zinc-100">
-        <span className="font-bold text-sm tracking-tight text-zinc-100 font-mono">ATO Lens</span>
-        <BrailleSpinner className="text-lg text-emerald-400" />
-        <span className="text-xs text-zinc-500 font-mono">Loading your local tax workspace…</span>
-      </div>
-    );
-  }
-
   return (
-    <ErrorBoundary name="ATO Lens Main Workspace">
-      <div className="flex h-screen w-screen overflow-hidden bg-black text-zinc-100 font-sans">
+    <MotionConfig reducedMotion="user">
+      <ErrorBoundary name="ATO Lens Main Workspace">
+        <div className="flex h-screen w-screen overflow-hidden bg-black text-zinc-100 font-sans">
         <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden bg-[#0a0a0a]">
           <Navbar
             financialYears={financialYears}
@@ -214,12 +179,12 @@ export function App() {
           />
 
           {/* Secondary Category Sub-Nav Pills */}
-          <div className="flex items-center gap-1.5 px-4 py-2 border-b border-zinc-800/80 bg-zinc-950/80 shrink-0 font-mono text-xs overflow-x-auto">
+          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-white/10 bg-[#0a0a0a] px-4 py-2 text-[13px] shrink-0">
             {[
               { id: 'overview', label: 'Summary Overview' },
               { id: 'income', label: 'Income & Employers' },
               { id: 'deductions', label: 'Work Deductions' },
-              { id: 'super', label: '12% Super Guarantee' },
+              { id: 'super', label: 'Super Guarantee' },
               { id: 'help', label: 'HELP Study Loan' },
               { id: 'compare', label: 'Year Comparison' },
               { id: 'documents', label: 'Source PDFs' },
@@ -227,24 +192,38 @@ export function App() {
             ].map((tab) => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id as NavTab)}
-                className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap ${
+                aria-pressed={activeTab === tab.id}
+                className={`relative px-3 py-1 rounded-lg transition-colors whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700'
+                    ? 'text-zinc-100 font-semibold'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
                 }`}
               >
-                {tab.label}
+                {activeTab === tab.id && (
+                  <motion.span
+                    layoutId={subnavHighlightId}
+                    className="absolute inset-0 rounded-lg border border-zinc-700 bg-zinc-800 shadow-sm"
+                    initial={false}
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
               </button>
             ))}
           </div>
 
           {showSampleData && (
-            <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-amber-500/20 bg-amber-500/10 text-amber-200 text-xs font-mono shrink-0">
-              <span>Showing sample data to preview ATO Lens. Upload a document to switch to your own data.</span>
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.025] px-4 py-2 text-xs text-zinc-400 shrink-0">
+              <span>
+                <strong className="mr-2 font-semibold text-zinc-200">Sample workspace</strong>
+                Upload a document to switch to your own data.
+              </span>
               <button
+                type="button"
                 onClick={handleToggleSampleData}
-                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 font-semibold"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1 font-medium text-zinc-300 transition-colors hover:bg-white/10"
               >
                 <EyeOff className="w-3.5 h-3.5" />
                 Hide Sample Data
@@ -310,8 +289,8 @@ export function App() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
                   <div>
-                    <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2 font-mono">
-                      <FileText className="w-5 h-5 text-emerald-400" />
+                    <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-100">
+                      <FileText className="w-5 h-5 text-blue-400" />
                       <span>Uploaded Source Documents</span>
                     </h2>
                     <p className="text-xs text-zinc-400">
@@ -320,7 +299,7 @@ export function App() {
                   </div>
                   <button
                     onClick={() => setIsUploadOpen(true)}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-medium"
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500"
                   >
                     + Upload Document
                   </button>
@@ -362,7 +341,7 @@ export function App() {
             {activeTab === 'privacy' && (
               <div className="space-y-6">
                 <div className="glass-panel p-6 space-y-4">
-                  <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2 font-mono">
+                  <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-100">
                     <ShieldCheck className="w-5 h-5 text-emerald-400" />
                     <span>Privacy & Local Storage Dashboard</span>
                   </h2>
@@ -372,7 +351,7 @@ export function App() {
                   <div className="pt-2 flex gap-3">
                     <button
                       onClick={() => setIsPrivacyOpen(true)}
-                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-semibold"
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-500"
                     >
                       Open Live Network Monitor
                     </button>
@@ -423,8 +402,9 @@ export function App() {
         />
 
         <DevTools onResetData={() => setIsPrivacyOpen(true)} />
-      </div>
-    </ErrorBoundary>
+        </div>
+      </ErrorBoundary>
+    </MotionConfig>
   );
 }
 

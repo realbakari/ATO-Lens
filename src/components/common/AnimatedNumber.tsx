@@ -39,6 +39,11 @@ export function AnimatedNumber({
     // Update ref for next comparison
     prevValueRef.current = value;
 
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplayText(text);
+      return;
+    }
+
     // Start scramble animation
     const speed = 0.03;
     const steps = Math.ceil(duration / speed);

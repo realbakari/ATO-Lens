@@ -1,14 +1,15 @@
 import type {
   AustralianFinancialYear,
   DeductionItem,
+  EditableFigure,
   ExtractedValue,
   IncomeItem,
   Payslip,
   SourceDocument
 } from '../types/tax';
 import type { ParsedDocumentResult, ParsedField } from '../parser/providerAdapter';
-import { calculateFullAustralianTax } from '../engine/taxCalculator';
 import { createBlankFinancialYear, getCurrentAustralianFinancialYear } from '../data/blankFinancialYear';
+import { recalculateFinancialYear, setFigureOrigins } from './recalculateFinancialYear';
 
 /** Resolves a parser's financial year label ("2025–26") to a workspace year. */
 export function resolveFinancialYear(label: string): {
@@ -49,7 +50,11 @@ export function applyParsedDocument(
     documents: [{ ...doc, financialYear: target.label }, ...base.documents]
   };
 
-  const updated = recalculate(applyFields(withDocument, doc, result));
+  const withFields = applyFields(withDocument, doc, result);
+  const updated = recalculateFinancialYear({
+    ...withFields,
+    employerCount: countEmployers(withFields)
+  });
 
   return existing
     ? years.map((fy) => (fy.id === updated.id ? updated : fy))
@@ -81,7 +86,14 @@ function applyFields(
   }
 
   if (result.documentType === 'notice_of_assessment') {
-    return {
+    const mapped: Array<[string, EditableFigure]> = [
+      ['taxableIncome', 'taxableIncome'],
+      ['taxWithheldCredit', 'taxWithheld'],
+      ['medicareLevy', 'medicareLevy'],
+      ['helpRepayment', 'helpRepayment'],
+      ['assessmentResult', 'assessmentResult']
+    ];
+    const next = {
       ...fy,
       taxableIncome: num('taxableIncome') ?? fy.taxableIncome,
       taxWithheld: num('taxWithheldCredit') ?? fy.taxWithheld,
@@ -89,6 +101,11 @@ function applyFields(
       helpRepayment: num('helpRepayment') ?? fy.helpRepayment,
       assessmentResult: num('assessmentResult') ?? fy.assessmentResult
     };
+    return setFigureOrigins(
+      next,
+      'document',
+      mapped.filter(([field]) => num(field) !== undefined).map(([, figure]) => figure)
+    );
   }
 
   // Income statements, tax returns and everything else that reports year totals.
@@ -132,7 +149,7 @@ function applyFields(
           }
         ];
 
-  return {
+  const next = {
     ...fy,
     income,
     deductions: deductionItems,
@@ -141,6 +158,12 @@ function applyFields(
     totalDeductions: deductions ?? fy.totalDeductions,
     employerSuper: num('employerSuper') ?? fy.employerSuper
   };
+  const supplied: EditableFigure[] = [];
+  if (grossIncome !== undefined) supplied.push('grossIncome');
+  if (num('taxWithheld') !== undefined) supplied.push('taxWithheld');
+  if (deductions !== undefined) supplied.push('totalDeductions');
+  if (num('employerSuper') !== undefined) supplied.push('employerSuper');
+  return setFigureOrigins(next, 'document', supplied);
 }
 
 function buildPayslip(
@@ -170,20 +193,7 @@ function buildPayslip(
   };
 }
 
-/**
- * Recomputes the figures that follow from the stated ones. Values a document
- * actually reported are kept; only untouched (zero) fields are filled in.
- */
-function recalculate(fy: AustralianFinancialYear): AustralianFinancialYear {
-  const hasHELP = fy.helpRepayment > 0 || Boolean(fy.studyLoans);
-  const engine = calculateFullAustralianTax(
-    fy.grossIncome,
-    fy.totalDeductions,
-    fy.taxWithheld,
-    hasHELP,
-    fy.id
-  );
-
+function countEmployers(fy: AustralianFinancialYear): number {
   const employers = new Set(
     [
       ...fy.income.map((item) => item.employerOrPayer.value),
@@ -192,14 +202,5 @@ function recalculate(fy: AustralianFinancialYear): AustralianFinancialYear {
       .map((name) => name.toLowerCase().trim())
       .filter((name) => name && name !== 'not stated on document')
   );
-
-  return {
-    ...fy,
-    taxableIncome: fy.taxableIncome || engine.taxableIncome,
-    medicareLevy: fy.medicareLevy || engine.medicareLevy,
-    helpRepayment: fy.helpRepayment || engine.helpRepayment,
-    assessmentResult: fy.assessmentResult || engine.assessmentResult,
-    effectiveTaxRate: fy.grossIncome > 0 ? engine.effectiveTaxRate : 0,
-    employerCount: employers.size
-  };
+  return employers.size;
 }
