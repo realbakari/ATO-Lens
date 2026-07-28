@@ -1,4 +1,4 @@
-const { app, dialog, shell } = require('electron');
+const { app, dialog, shell, Notification } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -53,8 +53,37 @@ function getAutoUpdater() {
 
   autoUpdater.autoDownload = false; // ask before pulling ~100 MB
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.logger = null;
+  // Keep electron-updater's own logging. Silencing it makes a failed update
+  // impossible to diagnose from a user's machine.
+  autoUpdater.logger = console;
+
+  autoUpdater.on('error', (err) => {
+    console.error('[ATO Lens] Updater error:', err);
+    setProgress(-1);
+  });
+
+  // A ~95 MB download over a slow link takes minutes. Without feedback the app
+  // looks frozen after the user agrees to update, so report progress on the
+  // dock/taskbar icon.
+  autoUpdater.on('download-progress', ({ percent, transferred, total }) => {
+    setProgress(percent / 100);
+    console.log(
+      `[ATO Lens] Downloading update: ${Math.round(percent)}% ` +
+        `(${(transferred / 1048576).toFixed(1)} of ${(total / 1048576).toFixed(1)} MB)`
+    );
+  });
+
+  autoUpdater.on('update-downloaded', () => setProgress(-1));
+
   return autoUpdater;
+}
+
+/** Drives the dock progress indicator; -1 clears it. */
+function setProgress(fraction) {
+  const { BrowserWindow } = require('electron');
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.setProgressBar(fraction);
+  }
 }
 
 /**
@@ -112,6 +141,24 @@ async function checkForUpdates(manual = false) {
       return;
     }
     if (response !== 0) return;
+
+    // An app still running from the mounted DMG cannot be replaced in place,
+    // and the failure message from that is not obvious.
+    if (process.platform === 'darwin' && app.getPath('exe').startsWith('/Volumes/')) {
+      await dialog.showMessageBox({
+        type: 'warning',
+        message: 'Move ATO Lens to Applications first',
+        detail:
+          'The app is running from the mounted disk image, which cannot be updated in place. Drag ATO Lens to your Applications folder, open it from there, and check again.',
+        buttons: ['OK']
+      });
+      return;
+    }
+
+    new Notification({
+      title: `Downloading ATO Lens ${version}`,
+      body: 'Progress is shown on the app icon. You can keep working.'
+    }).show();
 
     await updater.downloadUpdate();
     const { response: installNow } = await dialog.showMessageBox({
