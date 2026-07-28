@@ -15,6 +15,13 @@ files:
   - dist/**/*
   - electron/**/*
   - '!electron/entitlements.*.plist'
+  # Build inputs, not runtime assets. Only icon.png is loaded at runtime
+  # (app.dock.setIcon); the rest are consumed by electron-builder itself.
+  - '!electron/assets/app-icon.png'
+  - '!electron/assets/icon.svg'
+
+# Slower to build, smaller to download. Worth it for a ~100 MB Electron app.
+compression: maximum
 
 # Avoids the space in "ATO Lens" ending up percent-encoded in download URLs.
 artifactName: ATO-Lens-${version}-${arch}.${ext}
