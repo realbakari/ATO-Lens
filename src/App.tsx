@@ -9,6 +9,7 @@ import {
 } from './storage/db';
 import { INITIAL_FINANCIAL_YEARS } from './data/sampleData';
 import { applyParsedDocument, resolveFinancialYear } from './lib/applyParsedDocument';
+import { applyManualFigure, type EditableFigure } from './lib/manualFigures';
 import { runAustralianTaxReconciliation } from './engine/reconciliationEngine';
 import { applyElectronDocumentAttributes } from './lib/electron';
 import { Navbar } from './components/layout/Navbar';
@@ -160,6 +161,17 @@ export function App() {
     setSelectedFyId(resolveFinancialYear(result.financialYear).id);
   };
 
+  // Corrections apply to the user's own data. The bundled sample set is a
+  // preview and stays read-only.
+  const handleEditFigure = (figure: EditableFigure, value: number) => {
+    if (showSampleData || !currentFy) return;
+    setRealFinancialYears((prev) => {
+      const updated = prev.map((fy) => (fy.id === currentFy.id ? applyManualFigure(fy, figure, value) : fy));
+      saveFinancialYears(updated);
+      return updated;
+    });
+  };
+
   const handleToggleSampleData = () => {
     const next = !showSampleData;
     setShowSampleData(next);
@@ -258,6 +270,7 @@ export function App() {
                 allFys={financialYears}
                 onOpenProvenance={handleOpenProvenance}
                 onOpenApiKeyModal={() => setIsApiKeyOpen(true)}
+                onEditFigure={showSampleData ? undefined : handleEditFigure}
               />
             )}
 

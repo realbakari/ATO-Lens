@@ -17,7 +17,8 @@ import { SummaryTable } from './SummaryTable';
 import { ThresholdCard } from '../common/InsightCards';
 import { TaxOptimizationModal } from '../optimization/TaxOptimizationModal';
 import { ExportSummaryModal } from '../export/ExportSummaryModal';
-import { AnimatedNumber } from '../common/AnimatedNumber';
+import { EditableFigure } from '../common/EditableFigure';
+import { isManuallySet, type EditableFigure as FigureKey } from '../../lib/manualFigures';
 import { Sparkline } from '../common/Sparkline';
 
 interface OverviewSectionProps {
@@ -25,14 +26,24 @@ interface OverviewSectionProps {
   allFys: AustralianFinancialYear[];
   onOpenProvenance: (fieldName: string, value?: ExtractedValue<any>) => void;
   onOpenApiKeyModal: () => void;
+  /** Absent while previewing sample data, which is read-only. */
+  onEditFigure?: (figure: FigureKey, value: number) => void;
 }
 
 export const OverviewSection: React.FC<OverviewSectionProps> = ({
   currentFy,
   allFys,
   onOpenProvenance,
-  onOpenApiKeyModal
+  onOpenApiKeyModal,
+  onEditFigure
 }) => {
+  const figureProps = (figure: FigureKey) => ({
+    value: currentFy[figure] as number,
+    label: figure,
+    isManual: isManuallySet(currentFy, figure),
+    onCommit: onEditFigure ? (next: number) => onEditFigure(figure, next) : undefined
+  });
+
   const [viewMode, setViewMode] = useState<'grid' | 'table' | 'receipt'>('grid');
   const [isOptimizerOpen, setIsOptimizerOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -161,7 +172,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             >
               <div className="text-xs text-zinc-400 font-medium z-10 relative">Gross income</div>
               <div className="text-2xl font-bold font-mono text-zinc-100 z-10 relative">
-                $<AnimatedNumber value={currentFy.grossIncome} format={(n) => n.toLocaleString()} />
+                <EditableFigure {...figureProps('grossIncome')} />
               </div>
               <div className="text-[11px] text-zinc-400 flex items-center gap-1 z-10 relative">
                 <span>{currentFy.employerCount} employer(s)</span>
@@ -178,7 +189,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             >
               <div className="text-xs text-zinc-400 font-medium z-10 relative">Taxable income</div>
               <div className="text-2xl font-bold font-mono text-zinc-100 z-10 relative">
-                $<AnimatedNumber value={currentFy.taxableIncome} format={(n) => n.toLocaleString()} />
+                <EditableFigure {...figureProps('taxableIncome')} />
               </div>
               <div className="text-[11px] text-zinc-400 z-10 relative">After work deductions</div>
               <div className="absolute -bottom-1 -right-1 text-emerald-500 opacity-20 pointer-events-none">
@@ -193,7 +204,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             >
               <div className="text-xs text-zinc-400 font-medium z-10 relative">Tax withheld</div>
               <div className="text-2xl font-bold font-mono text-zinc-100 z-10 relative">
-                $<AnimatedNumber value={currentFy.taxWithheld} format={(n) => n.toLocaleString()} />
+                <EditableFigure {...figureProps('taxWithheld')} />
               </div>
               <div className="text-[11px] text-zinc-400 z-10 relative">PAYG tax collected</div>
               <div className="absolute -bottom-1 -right-1 text-emerald-500 opacity-20 pointer-events-none">
@@ -208,7 +219,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             >
               <div className="text-xs text-zinc-400 font-medium z-10 relative">Deductions</div>
               <div className="text-2xl font-bold font-mono text-zinc-100 z-10 relative">
-                $<AnimatedNumber value={currentFy.totalDeductions} format={(n) => n.toLocaleString()} />
+                <EditableFigure {...figureProps('totalDeductions')} />
               </div>
               <div className="text-[11px] text-zinc-400 z-10 relative">{currentFy.deductions.length} claimed items</div>
               <div className="absolute -bottom-1 -right-1 text-emerald-500 opacity-20 pointer-events-none">
@@ -223,7 +234,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             >
               <div className="text-xs text-zinc-400 font-medium z-10 relative">Medicare levy</div>
               <div className="text-2xl font-bold font-mono text-zinc-200 z-10 relative">
-                $<AnimatedNumber value={currentFy.medicareLevy} format={(n) => n.toLocaleString()} />
+                <EditableFigure {...figureProps('medicareLevy')} />
               </div>
               <div className="text-[11px] text-zinc-400 z-10 relative">Standard 2.0% levy</div>
               <div className="absolute -bottom-1 -right-1 text-zinc-500 opacity-20 pointer-events-none">
@@ -238,7 +249,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             >
               <div className="text-xs text-zinc-400 font-medium z-10 relative">HELP repayment</div>
               <div className="text-2xl font-bold font-mono text-zinc-100 z-10 relative">
-                $<AnimatedNumber value={currentFy.helpRepayment} format={(n) => n.toLocaleString()} />
+                <EditableFigure {...figureProps('helpRepayment')} />
               </div>
               <div className="text-[11px] text-zinc-400 z-10 relative">Study loan compulsory</div>
               <div className="absolute -bottom-1 -right-1 text-emerald-500 opacity-20 pointer-events-none">
@@ -256,11 +267,11 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
               }`}
             >
               <div className="text-xs font-medium text-zinc-300 z-10 relative">Assessment result</div>
-              <div className="text-2xl font-bold font-mono z-10 relative flex items-center">
-                {currentFy.assessmentResult >= 0 ? '+' : '-'}
-                $
-                <AnimatedNumber value={Math.abs(currentFy.assessmentResult)} format={(n) => n.toLocaleString()} />
-                <span className="text-sm ml-2 font-sans opacity-80">{currentFy.assessmentResult >= 0 ? 'refund' : 'payable'}</span>
+              <div className="text-2xl font-bold font-mono z-10 relative flex items-center gap-2">
+                <EditableFigure {...figureProps('assessmentResult')} signed />
+                <span className="font-sans text-sm opacity-80">
+                  {currentFy.assessmentResult >= 0 ? 'refund' : 'payable'}
+                </span>
               </div>
               <div className="text-[11px] opacity-80 z-10 relative">Notice of Assessment</div>
               <div className="absolute -bottom-1 -right-1 opacity-20 pointer-events-none">
@@ -275,7 +286,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             >
               <div className="text-xs text-zinc-400 font-medium z-10 relative">Employer super</div>
               <div className="text-2xl font-bold font-mono text-zinc-100 z-10 relative">
-                $<AnimatedNumber value={currentFy.employerSuper} format={(n) => n.toLocaleString()} />
+                <EditableFigure {...figureProps('employerSuper')} />
               </div>
               <div className="text-[11px] text-zinc-400 z-10 relative">12.0% SG Guarantee</div>
               <div className="absolute -bottom-1 -right-1 text-emerald-500 opacity-20 pointer-events-none">

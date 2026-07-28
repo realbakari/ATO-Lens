@@ -201,6 +201,12 @@ export interface AustralianFinancialYear {
   employerCount: number;
   effectiveTaxRate: number; // percentage
 
+  /**
+   * Figures the user corrected by hand. These are authoritative and are never
+   * recalculated, so a correction is not silently overwritten by the engine.
+   */
+  manualOverrides?: Partial<Record<string, boolean>>;
+
   income: IncomeItem[];
   deductions: DeductionItem[];
   superContributions: SuperContribution[];
